@@ -239,6 +239,13 @@ class Neo4jToolManager:
         Returns:
             Generated Cypher query string
         """
+        if self.llm is None:
+            raise RuntimeError(
+                "Graph query LLM is not initialized. "
+                "This usually means project settings have not been loaded yet. "
+                "Please try again or check that the agent model is configured."
+            )
+
         schema = self.graph.get_schema
 
         # Build the prompt with optional error context for retries

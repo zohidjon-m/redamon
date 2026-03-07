@@ -31,7 +31,8 @@
     "three-spritetext": "^1.9.0",
     "xlsx": "^0.18.5",
     "archiver": "^7.0.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.0",

@@ -18,6 +18,7 @@ interface Manifest {
   stats: {
     conversations: number
     chatMessages: number
+    remediations?: number
     neo4jNodes: number
     neo4jRelationships: number
     artifacts: number
@@ -45,6 +46,40 @@ interface ExportedMessage {
   type: string
   data: unknown
   createdAt: string
+}
+
+interface ExportedRemediation {
+  id: string
+  projectId: string
+  title: string
+  description: string
+  severity: string
+  priority: number
+  category: string
+  remediationType: string
+  affectedAssets: unknown
+  cvssScore: number | null
+  cveIds: string[]
+  cweIds: string[]
+  capecIds: string[]
+  evidence: string
+  attackChainPath: string
+  exploitAvailable: boolean
+  cisaKev: boolean
+  solution: string
+  fixComplexity: string
+  estimatedFiles: number
+  targetRepo: string
+  targetBranch: string
+  fixBranch: string
+  prUrl: string
+  prStatus: string
+  status: string
+  agentSessionId: string
+  agentNotes: string
+  fileChanges: unknown
+  createdAt: string
+  updatedAt: string
 }
 
 interface ExportedNode {
@@ -154,6 +189,7 @@ export async function POST(request: NextRequest) {
     const stats = {
       conversations: 0,
       messages: 0,
+      remediations: 0,
       neo4jNodes: 0,
       neo4jRelationships: 0,
       artifacts: 0,
@@ -206,6 +242,26 @@ export async function POST(request: NextRequest) {
           await prisma.chatMessage.createMany({ data: chunk })
         }
         stats.messages = messageBatch.length
+      }
+    }
+
+    // Import remediations
+    const remediationsFile = zip.file('remediations/remediations.json')
+    if (remediationsFile) {
+      const remediations: ExportedRemediation[] = JSON.parse(await remediationsFile.async('text'))
+
+      if (remediations.length > 0) {
+        const CHUNK_SIZE = 500
+        const remediationBatch = remediations.map(rem => {
+          const { id: _id, projectId: _pid, createdAt: _ca, updatedAt: _ua, ...fields } = rem
+          return { ...fields, projectId: newProject.id } as any
+        })
+
+        for (let i = 0; i < remediationBatch.length; i += CHUNK_SIZE) {
+          const chunk = remediationBatch.slice(i, i + CHUNK_SIZE)
+          await prisma.remediation.createMany({ data: chunk })
+        }
+        stats.remediations = remediationBatch.length
       }
     }
 

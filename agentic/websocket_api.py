@@ -629,6 +629,12 @@ class WebSocketHandler:
 
             logger.info(f"Processing approval for session {connection.session_id}: {approval_msg.decision}")
 
+            # Persist the user's approval decision so it survives conversation reload
+            callback._persist("approval_response", {
+                "decision": approval_msg.decision,
+                "modification": approval_msg.modification,
+            })
+
             asyncio.create_task(update_conversation(connection.session_id, {"agentRunning": True}))
 
             task = asyncio.create_task(
@@ -690,6 +696,11 @@ class WebSocketHandler:
             connection._is_stopped = False
 
             logger.info(f"Processing answer for session {connection.session_id}")
+
+            # Persist the user's answer so it survives conversation reload
+            callback._persist("answer_response", {
+                "answer": answer_msg.answer,
+            })
 
             asyncio.create_task(update_conversation(connection.session_id, {"agentRunning": True}))
 

@@ -456,6 +456,329 @@ const SOCIAL_ENGINEERING_GROUPS: SESubGroup[] = [
   },
 ]
 
+// =============================================================================
+// INFORMATIONAL SUGGESTION DATA
+// =============================================================================
+
+const INFORMATIONAL_GROUPS: SESubGroup[] = [
+  {
+    id: 'attack_surface',
+    title: 'Attack Surface Overview',
+    items: [
+      {
+        suggestions: [
+          { label: 'Full attack surface map', prompt: 'Query the graph to list all domains, subdomains, IP addresses, open ports, and running services. Organize results by domain hierarchy and highlight internet-facing assets.' },
+          { label: 'Subdomain enumeration summary', prompt: 'Query the graph for all subdomains and their DNS records (A, AAAA, CNAME, MX, NS, TXT). Identify wildcard DNS, dangling CNAMEs, and potential subdomain takeover candidates.' },
+          { label: 'External IP and port inventory', prompt: 'Query the graph for all IP addresses and their open ports with service/version detection. Group by IP and flag uncommon or high-risk ports (e.g., 445, 3389, 6379, 27017).' },
+          { label: 'ASN and network mapping', prompt: 'Query the graph for all ASN information, IP ranges, and reverse DNS records. Map out which networks and hosting providers are in scope.' },
+          { label: 'CDN and WAF detection summary', prompt: 'Query the graph for all CDN/WAF detections. Identify which assets are behind Cloudflare, Akamai, AWS CloudFront, etc., and which are directly exposed.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'vuln_analysis',
+    title: 'Vulnerability Analysis',
+    items: [
+      {
+        suggestions: [
+          { label: 'Critical and high severity CVEs', prompt: 'Query the graph for all vulnerabilities with CVSS >= 7.0, sorted by severity. For each, show the CVE ID, CVSS score, affected service/technology, and the host where it was found.' },
+          { label: 'CISA KEV matches', prompt: 'Query the graph for all discovered CVEs, then use web_search to check which ones appear in the CISA Known Exploited Vulnerabilities catalog. List matches with their required remediation dates.' },
+          { label: 'Exploitable CVEs with Metasploit modules', prompt: 'Query the graph for all CVEs found, then use web_search to identify which ones have known Metasploit exploit modules. List the module path, target service, and affected host.' },
+          { label: 'Prioritized risk summary', prompt: 'Query the graph for all vulnerabilities, technologies, and exposed services. Create a prioritized risk assessment ranked by: 1) CVSS score, 2) exploit availability, 3) exposure level. Include a top-10 most critical findings table.' },
+          { label: 'CVEs with public exploit code', prompt: 'Query the graph for all CVEs, then use web_search to find which have public exploit code on GitHub or ExploitDB. List the CVE, affected asset, and exploit URL for each.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'tech_intel',
+    title: 'Technology & Version Intelligence',
+    items: [
+      {
+        suggestions: [
+          { label: 'Outdated software inventory', prompt: 'Query the graph for all detected technologies with version numbers and CPE identifiers. Use web_search to check each for known CVEs and end-of-life status. Flag any outdated or unsupported versions.' },
+          { label: 'Web server and framework versions', prompt: 'Query the graph for all web technologies (Apache, Nginx, IIS, Tomcat, WordPress, Drupal, etc.) with their versions. Identify which versions have known critical vulnerabilities.' },
+          { label: 'Database and cache services', prompt: 'Query the graph for all database and cache services (MySQL, PostgreSQL, Redis, MongoDB, Memcached, Elasticsearch). List their versions, exposed ports, and whether authentication is required.' },
+          { label: 'CMS and application detection', prompt: 'Query the graph for CMS platforms (WordPress, Joomla, Drupal, etc.) and web frameworks. Use web_search to find known vulnerabilities for each detected version.' },
+          { label: 'Technology stack by host', prompt: 'Query the graph to build a complete technology stack (OS, web server, language, framework, database, CDN) for each host. Identify mismatches and unusual configurations.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'web_recon',
+    title: 'Web Application Recon',
+    items: [
+      {
+        suggestions: [
+          { label: 'Discovered endpoints and parameters', prompt: 'Query the graph for all web endpoints, their HTTP methods, parameters, and response codes. Highlight endpoints with user-input parameters that could be injection targets.' },
+          { label: 'Admin panels and login pages', prompt: 'Query the graph for endpoints matching common admin/login paths (/admin, /login, /wp-admin, /manager, /console, /dashboard). Use execute_curl to verify which are accessible and identify the technology behind them.' },
+          { label: 'API endpoint discovery', prompt: 'Query the graph for all endpoints that look like API routes (/api/, /v1/, /graphql, /rest/). Use execute_curl to probe a sample of them for authentication requirements, response formats, and exposed data.' },
+          { label: 'Sensitive file and directory exposure', prompt: 'Use execute_curl to probe for common sensitive paths: /.git/config, /.env, /robots.txt, /sitemap.xml, /.well-known/, /backup/, /debug/, /phpinfo.php on all discovered web hosts.' },
+          { label: 'Form and input analysis', prompt: 'Query the graph for all discovered parameters and forms. Categorize them by input type (search, login, upload, comment, API) and flag candidates for SQLi, XSS, SSRF, and file upload testing.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'network_recon',
+    title: 'Network Reconnaissance',
+    items: [
+      {
+        suggestions: [
+          { label: 'Deep Nmap scan on key targets', prompt: 'Identify the top 5 most interesting hosts from the graph (those with most services or vulnerabilities), then run execute_nmap with -sV -sC -O for detailed service detection, default script scanning, and OS fingerprinting.' },
+          { label: 'UDP service discovery', prompt: 'Run execute_nmap with -sU --top-ports 50 against the primary targets to discover UDP services like DNS (53), SNMP (161), TFTP (69), NTP (123), and IPMI (623).' },
+          { label: 'Quick port scan on new targets', prompt: 'Use execute_naabu to perform a fast SYN scan on all in-scope IPs, then compare results with the graph data to identify any newly discovered open ports.' },
+          { label: 'SMB and NetBIOS enumeration', prompt: 'Run execute_nmap with --script smb-enum-shares,smb-enum-users,smb-os-discovery,smb-security-mode against any hosts with port 445/139 open. Report accessible shares and security configuration.' },
+          { label: 'Nmap NSE vulnerability scripts', prompt: 'Run execute_nmap with --script vuln against the top targets to discover additional vulnerabilities not found by Nuclei. Compare with existing graph data to identify new findings.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'cred_exposure',
+    title: 'Credential & Secret Exposure',
+    items: [
+      {
+        suggestions: [
+          { label: 'GitHub leaked secrets inventory', prompt: 'Query the graph for all GitHub secrets found (API keys, tokens, passwords, private keys). Categorize by type, affected service, and assess which ones could still be valid.' },
+          { label: 'Validate leaked credentials', prompt: 'Query the graph for all discovered GitHub secrets and credentials. Use execute_curl or execute_code to test which API keys and tokens are still active without triggering rate limits.' },
+          { label: 'Brute-forceable service inventory', prompt: 'Query the graph for all services that expose authentication (SSH, FTP, RDP, SMB, MySQL, PostgreSQL, HTTP Basic/Form Auth, Tomcat Manager). List host, port, and service type for each.' },
+          { label: 'Default credential lookup', prompt: 'Query the graph for all discovered services and technologies. Use web_search to look up default credentials for each vendor/product, then compile a list of default username/password pairs to test.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'tls_security',
+    title: 'TLS & Security Configuration',
+    items: [
+      {
+        suggestions: [
+          { label: 'TLS certificate audit', prompt: 'Query the graph for all TLS certificates. Report expired or soon-to-expire certs, self-signed certs, wildcard certs, weak key sizes, and JARM fingerprint anomalies.' },
+          { label: 'HTTP security headers analysis', prompt: 'Query the graph for all security headers (CSP, X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy, Permissions-Policy). Flag missing or misconfigured headers per host.' },
+          { label: 'SSL/TLS weakness scan', prompt: 'Run execute_nmap with --script ssl-enum-ciphers on all HTTPS hosts. Identify weak ciphers (RC4, DES, export), deprecated protocols (SSLv3, TLS 1.0/1.1), and missing features like PFS.' },
+          { label: 'CORS and cookie security audit', prompt: 'Use execute_curl to check CORS headers (Access-Control-Allow-Origin) and cookie attributes (Secure, HttpOnly, SameSite) on all discovered web applications. Flag overly permissive configurations.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'osint_research',
+    title: 'OSINT & Research',
+    items: [
+      {
+        suggestions: [
+          { label: 'Research top CVEs in depth', prompt: 'Query the graph for the 5 highest CVSS vulnerabilities. For each, use web_search to find: exploit PoCs, Metasploit modules, affected versions, patch status, and real-world exploitation reports.' },
+          { label: 'Search for exploit PoCs', prompt: 'Query the graph for all CVEs found, then use web_search to search GitHub and ExploitDB for proof-of-concept exploit code. Summarize available PoCs with links and assess reliability.' },
+          { label: 'Searchsploit local lookup', prompt: 'Query the graph for all technologies and versions, then use kali_shell to run searchsploit against each technology/version combination. Report all matching exploits from ExploitDB.' },
+          { label: 'CVE exploit chain analysis', prompt: 'Query the graph for all vulnerabilities on each host. Use web_search to research whether any combination of findings could be chained into a multi-step attack (e.g., info disclosure + auth bypass + RCE).' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'active_verify',
+    title: 'Active Verification',
+    items: [
+      {
+        suggestions: [
+          { label: 'Nuclei verification of top CVEs', prompt: 'Query the graph for the 10 highest severity vulnerabilities, then use execute_nuclei to re-verify each one with targeted template IDs. Confirm which are true positives and provide proof.' },
+          { label: 'Probe for exposed admin interfaces', prompt: 'Use execute_curl to probe all discovered web hosts for common admin paths (/admin, /manager/html, /wp-admin, /phpmyadmin, /console). Record response codes, redirects, and page content.' },
+          { label: 'Version fingerprinting via curl', prompt: 'Use execute_curl to collect detailed HTTP response headers and body content from all web servers. Extract exact version strings from Server headers, X-Powered-By, generator meta tags, and error pages.' },
+          { label: 'Nuclei full template scan', prompt: 'Run execute_nuclei with a broad template set (cves, misconfiguration, exposure, default-logins) against the top 3 targets. Report all findings categorized by severity.' },
+          { label: 'Test for path traversal', prompt: 'Use execute_curl to test path traversal payloads (../../../etc/passwd, ..\\..\\..\\windows\\win.ini) against all discovered web endpoints that accept file path parameters. Report any successful reads.' },
+        ],
+      },
+    ],
+  },
+]
+
+// =============================================================================
+// EXPLOITATION SUGGESTION DATA
+// =============================================================================
+
+const EXPLOITATION_GROUPS: SESubGroup[] = [
+  {
+    id: 'cve_exploit',
+    title: 'CVE Exploitation',
+    items: [
+      {
+        suggestions: [
+          { label: 'Exploit the most critical CVE', prompt: 'Query the graph for the highest CVSS vulnerability with a known Metasploit module. Set up and launch the exploit using metasploit_console to gain a remote shell on the target.' },
+          { label: 'Exploit a critical CVE and open a session', prompt: 'Find the most critical CVE on the target, exploit it with Metasploit, and open a Meterpreter shell session. Confirm the session is stable and report the access level obtained.' },
+          { label: 'Exploit a known RCE vulnerability', prompt: 'Query the graph for Remote Code Execution (RCE) CVEs, select the most promising one, search for its Metasploit module, configure it, and exploit the target to gain a shell.' },
+          { label: 'Chain vulnerabilities for RCE', prompt: 'Analyze all discovered vulnerabilities on the target. Chain multiple lower-severity findings together (e.g., info disclosure + auth bypass + injection) to achieve remote code execution.' },
+          { label: 'Exploit a web server CVE', prompt: 'Query the graph for CVEs affecting web servers (Apache, Nginx, IIS, Tomcat). Find the Metasploit module, configure it for the target, and exploit it to gain a shell.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'brute_force',
+    title: 'Brute Force & Credential Attacks',
+    items: [
+      {
+        suggestions: [
+          { label: 'Brute force SSH and explore the server', prompt: 'Use execute_hydra to brute force SSH credentials on the target using common username/password lists. Once access is gained, enumerate sensitive files, users, and configuration.' },
+          { label: 'Test default credentials on all services', prompt: 'Query the graph for all services with authentication (Tomcat, Jenkins, phpMyAdmin, databases, FTP, SSH). Use execute_hydra and execute_curl to test default and common credentials on each.' },
+          { label: 'Leverage GitHub secrets to access the server', prompt: 'Query the graph for GitHub secrets (credentials, API keys, tokens). Use any discovered credentials to attempt SSH, FTP, database, or web admin access. Report what access was gained.' },
+          { label: 'Brute force web login forms', prompt: 'Query the graph for login form endpoints. Use execute_hydra with http-post-form to brute force credentials using common wordlists. Report any successful logins.' },
+          { label: 'Database credential brute force', prompt: 'Query the graph for exposed database ports (MySQL 3306, PostgreSQL 5432, MSSQL 1433, MongoDB 27017). Use execute_hydra to test common credentials, then connect and enumerate databases.' },
+          { label: 'FTP anonymous and credential testing', prompt: 'Query the graph for all FTP services. Test for anonymous access first, then use execute_hydra to brute force common credentials. Enumerate any accessible files and directories.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'web_attacks',
+    title: 'Web Application Attacks',
+    items: [
+      {
+        suggestions: [
+          { label: 'Exploit SQL injection on web forms', prompt: 'Query the graph for web endpoints with input parameters. Use kali_shell with sqlmap to test for SQL injection vulnerabilities, then extract database schema, tables, and sensitive data.' },
+          { label: 'Upload a web shell via file upload', prompt: 'Query the graph for file upload endpoints. Craft and upload a PHP/JSP/ASPX web shell using execute_curl with various bypass techniques (extension tricks, content-type manipulation). Confirm remote command execution.' },
+          { label: 'Test for command injection', prompt: 'Query the graph for endpoints with parameters that could interact with OS commands. Use execute_curl to test command injection payloads (;id, |whoami, $(id), `id`). Escalate any confirmed injection to a reverse shell.' },
+          { label: 'Exploit SSRF vulnerabilities', prompt: 'Query the graph for endpoints that accept URL parameters. Use execute_curl to test SSRF payloads targeting internal services (http://127.0.0.1, http://169.254.169.254 for cloud metadata, internal admin panels).' },
+          { label: 'Test for directory traversal and LFI', prompt: 'Query the graph for endpoints with file path parameters. Use execute_curl to test directory traversal payloads to read /etc/passwd, /etc/shadow, application config files, and attempt LFI to RCE via log poisoning.' },
+          { label: 'Exploit XSS for session hijacking', prompt: 'Query the graph for endpoints with reflected or stored XSS potential. Craft XSS payloads using execute_curl to test for JavaScript execution and demonstrate session cookie theft.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'manual_exploit',
+    title: 'Manual Exploitation',
+    items: [
+      {
+        suggestions: [
+          { label: 'Nuclei-verified exploit execution', prompt: 'Query the graph for Nuclei-confirmed vulnerabilities. For the most critical one, use execute_curl or execute_code to manually craft and send the exploit payload. Confirm exploitation and demonstrate impact.' },
+          { label: 'Custom exploit script from PoC', prompt: 'Query the graph for the most critical CVE, then use web_search to find a public exploit PoC. Adapt it using execute_code (Python) to work against the target, execute it, and confirm exploitation.' },
+          { label: 'Reverse shell via curl exploitation', prompt: 'Identify a confirmed RCE vulnerability on a web target. Use execute_curl to manually exploit it and inject a reverse shell payload (bash, python, or netcat). Set up the listener in kali_shell.' },
+          { label: 'Exploit misconfigured service', prompt: 'Query the graph for services with known misconfigurations (unauthenticated Redis, open MongoDB, exposed Docker API, Kubernetes dashboard). Use kali_shell tools to exploit the misconfiguration and gain access.' },
+          { label: 'Exploit exposed management interface', prompt: 'Query the graph for management interfaces (Tomcat Manager, Jenkins, JMX, phpMyAdmin). Attempt access using discovered or default credentials, then leverage the interface to deploy a payload or execute commands.' },
+        ],
+      },
+    ],
+  },
+]
+
+// =============================================================================
+// POST-EXPLOITATION SUGGESTION DATA
+// =============================================================================
+
+const POST_EXPLOITATION_GROUPS: SESubGroup[] = [
+  {
+    id: 'cred_harvest',
+    title: 'Credential Harvesting & Cracking',
+    items: [
+      {
+        suggestions: [
+          { label: 'Hunt for secrets and credentials', prompt: 'Search the compromised server for passwords, API keys, tokens, and secrets in config files, environment variables, .env files, .bash_history, application configs, and web server configs. Report all findings.' },
+          { label: 'Dump and crack password hashes', prompt: 'Extract password hashes from /etc/shadow (Linux) or SAM database (Windows via Meterpreter hashdump). Use kali_shell with john or hashcat to crack the hashes with common wordlists.' },
+          { label: 'Database credential extraction', prompt: 'Search for database connection strings and credentials in web application config files (wp-config.php, .env, settings.py, application.properties, web.config). Connect to found databases and dump user/credential tables.' },
+          { label: 'Extract private keys and certificates', prompt: 'Search the filesystem for SSH private keys (~/.ssh/id_rsa, /etc/ssh/), TLS private keys, PFX/P12 files, and PGP keys. Test each key for passwordless access to other systems.' },
+          { label: 'Browser and application credential dump', prompt: 'Search for saved credentials in browser profiles, password managers, FTP client configs (FileZilla), email client configs, and application credential stores. Extract and organize all found credentials.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'privesc',
+    title: 'Privilege Escalation',
+    items: [
+      {
+        osLabel: 'Linux',
+        suggestions: [
+          { label: 'SUID/SGID binary exploitation', prompt: 'Run find / -perm -4000 2>/dev/null to list all SUID binaries. Cross-reference with GTFOBins using web_search to find exploitable binaries. Attempt privilege escalation via the most promising vector.' },
+          { label: 'Sudo misconfiguration exploitation', prompt: 'Run sudo -l to check sudo permissions. Identify any NOPASSWD entries, wildcard abuse, or LD_PRELOAD/LD_LIBRARY_PATH exploitation paths. Use GTFOBins to escalate to root.' },
+          { label: 'Writable cron job exploitation', prompt: 'Enumerate all cron jobs (crontab -l, /etc/crontab, /etc/cron.d/*, /var/spool/cron/). Find any writable scripts executed by root. Inject a reverse shell or add a backdoor user to escalate privileges.' },
+          { label: 'Linux kernel exploit check', prompt: 'Collect kernel version (uname -a), distribution info, and installed packages. Use web_search to find applicable kernel exploits (DirtyPipe, DirtyCow, etc.). Compile and run the most suitable exploit via execute_code.' },
+          { label: 'Capability-based escalation', prompt: 'Run getcap -r / 2>/dev/null to find binaries with special capabilities. Check for cap_setuid, cap_dac_read_search, cap_net_raw, or cap_sys_admin. Exploit the capabilities to escalate to root.' },
+        ],
+      },
+      {
+        osLabel: 'Windows',
+        suggestions: [
+          { label: 'Windows service misconfiguration', prompt: 'Use Meterpreter getsystem and check for unquoted service paths, writable service binaries, and modifiable service configurations. Exploit the most promising vector to escalate to SYSTEM.' },
+          { label: 'Token impersonation (Potato attacks)', prompt: 'Check current privileges with whoami /priv. If SeImpersonatePrivilege is enabled, use a Potato attack (JuicyPotato, PrintSpoofer, GodPotato) via metasploit_console to escalate to SYSTEM.' },
+          { label: 'Credential harvesting with Mimikatz', prompt: 'Load Mimikatz via Meterpreter (load kiwi) and run creds_all to dump plaintext passwords, NTLM hashes, and Kerberos tickets from memory. Report all harvested credentials.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'lateral_movement',
+    title: 'Lateral Movement',
+    items: [
+      {
+        suggestions: [
+          { label: 'Map internal network and pivot', prompt: 'Enumerate network interfaces (ifconfig/ipconfig), ARP tables (arp -a), routing tables, and /etc/hosts. Discover internal hosts and subnets, then set up Meterpreter autoroute to pivot into the internal network.' },
+          { label: 'Harvest SSH keys and move laterally', prompt: 'Collect all SSH keys (~/.ssh/), known_hosts, authorized_keys, and bash_history SSH commands. Attempt to SSH into discovered internal hosts using the harvested keys and any cracked credentials.' },
+          { label: 'Port forwarding for internal access', prompt: 'Set up Meterpreter port forwarding (portfwd add) to access internal services that are not directly reachable. Forward interesting internal ports (web admin panels, databases, RDP) to the attacker machine.' },
+          { label: 'Internal service enumeration', prompt: 'From the compromised host, use kali_shell to scan the internal network (nmap or naabu) for additional hosts and services. Identify high-value targets like domain controllers, databases, file servers, and CI/CD systems.' },
+          { label: 'SMB/WinRM lateral movement', prompt: 'Use discovered credentials to attempt lateral movement via SMB (psexec, smbexec) or WinRM to other Windows hosts. Use metasploit_console modules like exploit/windows/smb/psexec.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'data_exfil',
+    title: 'Data Exfiltration & Pillaging',
+    items: [
+      {
+        suggestions: [
+          { label: 'Pivot to database and dump data', prompt: 'Find database credentials in application config files. Connect to the database (MySQL, PostgreSQL, MongoDB) and enumerate all databases, tables, and dump sensitive data (users, credentials, PII, financial records).' },
+          { label: 'Source code and configuration theft', prompt: 'Search for application source code repositories (.git directories), deployment scripts, CI/CD configs, Dockerfiles, and Kubernetes manifests. Download and analyze for hardcoded secrets and architecture intel.' },
+          { label: 'Backup file discovery', prompt: 'Search for backup files: *.bak, *.sql, *.dump, *.tar.gz, *.zip in common backup locations (/backup, /var/backups, /tmp, /opt, home directories). Extract and analyze any found backups for credentials and sensitive data.' },
+          { label: 'Email and document pillaging', prompt: 'Search for emails (Maildir, mbox), documents (*.pdf, *.docx, *.xlsx), and spreadsheets containing sensitive information. Look in home directories, /var/mail, and application data directories.' },
+          { label: 'Cloud credential extraction', prompt: 'Search for cloud provider credentials: AWS (~/.aws/credentials), GCP (service account JSON), Azure (azure.json), and Kubernetes configs (~/.kube/config). Test validity and enumerate accessible cloud resources.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'persistence',
+    title: 'Persistence',
+    items: [
+      {
+        osLabel: 'Linux',
+        suggestions: [
+          { label: 'Cron job backdoor', prompt: 'Create a cron job that periodically executes a reverse shell back to the attacker. Use kali_shell to add the entry to crontab and verify it persists across reboots.' },
+          { label: 'SSH key persistence', prompt: 'Generate an SSH key pair and inject the public key into root and user authorized_keys files. Test that passwordless SSH access works. This survives password changes and reboots.' },
+          { label: 'Backdoor user account', prompt: 'Create a new user account with root privileges (UID 0 or sudo group membership). Set a known password and verify SSH access. Use an inconspicuous username that blends with existing accounts.' },
+          { label: 'Systemd service backdoor', prompt: 'Create a systemd service unit that executes a reverse shell on boot. Use kali_shell to write the service file, enable it with systemctl, and verify it starts on system restart.' },
+        ],
+      },
+      {
+        osLabel: 'Windows',
+        suggestions: [
+          { label: 'Registry run key persistence', prompt: 'Use Meterpreter or kali_shell to add a registry run key (HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run) that executes the payload on user login. Verify persistence across reboots.' },
+          { label: 'Scheduled task persistence', prompt: 'Create a Windows scheduled task that runs the payload on system startup or user login. Use kali_shell with schtasks to configure it and verify execution.' },
+          { label: 'Meterpreter persistence module', prompt: 'Use Meterpreter persistence module (run persistence -h) to install an auto-starting payload. Configure it to reconnect every 60 seconds and start on boot.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'sys_enum',
+    title: 'System & Environment Enumeration',
+    items: [
+      {
+        suggestions: [
+          { label: 'Full system enumeration', prompt: 'Collect comprehensive system information: OS version, kernel, hostname, architecture, installed packages, running processes, logged-in users, environment variables, mounted filesystems, and scheduled tasks.' },
+          { label: 'User and group enumeration', prompt: 'Enumerate all user accounts (/etc/passwd, net user), groups (/etc/group), sudo permissions, login history (lastlog, wtmp), and currently logged-in users. Identify service accounts and privileged users.' },
+          { label: 'Network configuration mapping', prompt: 'Map all network interfaces, IP addresses, routing tables, DNS configuration, active connections (netstat/ss), listening services, firewall rules (iptables/ufw), and ARP neighbors.' },
+          { label: 'Process and service audit', prompt: 'List all running processes with their owners and command lines (ps aux). Identify services running as root, unusual processes, and processes with network connections. Check for Docker/container environments.' },
+          { label: 'Installed software and patch level', prompt: 'List all installed packages and their versions (dpkg -l, rpm -qa, pip list, npm list -g). Identify security patches applied and missing. Flag any software with known privilege escalation vulnerabilities.' },
+          { label: 'Defacement proof of compromise', prompt: 'Locate the web server document root and replace the homepage with a proof-of-compromise page showing access was achieved. Take a screenshot via execute_curl to document the result.' },
+        ],
+      },
+    ],
+  },
+]
+
 export function AIAssistantDrawer({
   isOpen,
   onClose,
@@ -501,6 +824,9 @@ export function AIAssistantDrawer({
   // Template dropdown state
   const [openTemplateGroup, setOpenTemplateGroup] = useState<string | null>(null)
   const [openSocialSubGroup, setOpenSocialSubGroup] = useState<string | null>(null)
+  const [openInfoSubGroup, setOpenInfoSubGroup] = useState<string | null>(null)
+  const [openExploitSubGroup, setOpenExploitSubGroup] = useState<string | null>(null)
+  const [openPostSubGroup, setOpenPostSubGroup] = useState<string | null>(null)
 
   // Conversation hooks
   const {
@@ -1289,10 +1615,35 @@ export function AIAssistantDrawer({
         lastApprovalRequest = data
         hasWorkAfterApproval = false
         return null
+      } else if (msg.type === 'approval_response') {
+        // User's approval decision — render as a user message
+        lastApprovalRequest = null
+        hasWorkAfterApproval = true
+        const label = data.decision === 'approve'
+          ? 'Approved phase transition'
+          : data.decision === 'modify'
+          ? `Modified: ${data.modification || ''}`
+          : 'Aborted phase transition'
+        return {
+          id: msg.id,
+          role: 'user',
+          content: label,
+          timestamp: new Date(msg.createdAt),
+        } as Message
       } else if (msg.type === 'question_request') {
         lastQuestionRequest = data
         hasWorkAfterQuestion = false
         return null
+      } else if (msg.type === 'answer_response') {
+        // User's answer to agent question — render as a user message
+        lastQuestionRequest = null
+        hasWorkAfterQuestion = true
+        return {
+          id: msg.id,
+          role: 'user',
+          content: `Answer: ${data.answer || ''}`,
+          timestamp: new Date(msg.createdAt),
+        } as Message
       }
       // Skip unknown types
       return null
@@ -1741,33 +2092,31 @@ export function AIAssistantDrawer({
                 </button>
                 {openTemplateGroup === 'informational' && (
                   <div className={styles.templateGroupItems}>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Map the attack surface: list all domains, subdomains, IPs, open ports, and services discovered')} disabled={!isConnected}>
-                      Map the full attack surface
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Which vulnerabilities have known Metasploit exploit modules available?')} disabled={!isConnected}>
-                      Find exploitable CVEs with Metasploit modules
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Were any credentials, API keys, or secrets leaked in GitHub repositories?')} disabled={!isConnected}>
-                      Check for leaked secrets on GitHub
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Are any CISA Known Exploited Vulnerabilities (KEV) present in the scan results?')} disabled={!isConnected}>
-                      Find CISA Known Exploited Vulnerabilities
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('What web endpoints, parameters, and forms were discovered by the crawler?')} disabled={!isConnected}>
-                      Show discovered web endpoints and parameters
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Give me a prioritized risk summary of all findings ranked by severity and exploitability')} disabled={!isConnected}>
-                      Prioritized risk summary
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('What technology versions were detected, and which ones have known CVEs?')} disabled={!isConnected}>
-                      Detect outdated technologies with known CVEs
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Which services expose authentication that could be tested with credential brute force?')} disabled={!isConnected}>
-                      Find brute-forceable services
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Analyze TLS certificates and HTTP security headers for misconfigurations')} disabled={!isConnected}>
-                      Analyze TLS and security headers
-                    </button>
+                    {INFORMATIONAL_GROUPS.map(group => (
+                      <React.Fragment key={group.id}>
+                        <button
+                          className={`${styles.templateSubGroupHeader} ${openInfoSubGroup === group.id ? styles.templateSubGroupHeaderOpen : ''}`}
+                          onClick={() => setOpenInfoSubGroup(prev => prev === group.id ? null : group.id)}
+                        >
+                          <span>{group.title}</span>
+                          <ChevronDown size={12} className={styles.templateSubGroupChevron} />
+                        </button>
+                        {openInfoSubGroup === group.id && (
+                          <div className={styles.templateSubGroupItems}>
+                            {group.items.map((section, i) => (
+                              <React.Fragment key={i}>
+                                {section.osLabel && <span className={styles.templateOsLabel}>{section.osLabel}</span>}
+                                {section.suggestions.map((s, j) => (
+                                  <button key={j} className={styles.suggestion} onClick={() => setInputValue(s.prompt)} disabled={!isConnected}>
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1785,30 +2134,31 @@ export function AIAssistantDrawer({
                 </button>
                 {openTemplateGroup === 'exploitation' && (
                   <div className={styles.templateGroupItems}>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Find and exploit the most critical CVE affecting the primary target')} disabled={!isConnected}>
-                      Exploit the most critical vulnerability
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Find the most critical CVE on the target, exploit it with Metasploit, and open a shell session')} disabled={!isConnected}>
-                      Exploit a critical CVE and open a session
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Brute force SSH credentials on the target, then list sensitive files and directories')} disabled={!isConnected}>
-                      Brute force SSH and explore the server
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Use any secrets or credentials found on GitHub to attempt access to the target server and report what you find')} disabled={!isConnected}>
-                      Leverage GitHub secrets to access the server
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Test for SQL injection on discovered web forms and parameters, then extract database contents')} disabled={!isConnected}>
-                      Exploit SQL injection on web forms
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Attempt to exploit default or weak credentials on all discovered login panels, admin interfaces, and services')} disabled={!isConnected}>
-                      Test default credentials on all services
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Upload a web shell to the target server through a file upload vulnerability and gain remote command execution')} disabled={!isConnected}>
-                      Upload a web shell via file upload vulnerability
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Chain multiple low-severity findings together to achieve remote code execution on the target')} disabled={!isConnected}>
-                      Chain vulnerabilities for RCE
-                    </button>
+                    {EXPLOITATION_GROUPS.map(group => (
+                      <React.Fragment key={group.id}>
+                        <button
+                          className={`${styles.templateSubGroupHeader} ${openExploitSubGroup === group.id ? styles.templateSubGroupHeaderOpen : ''}`}
+                          onClick={() => setOpenExploitSubGroup(prev => prev === group.id ? null : group.id)}
+                        >
+                          <span>{group.title}</span>
+                          <ChevronDown size={12} className={styles.templateSubGroupChevron} />
+                        </button>
+                        {openExploitSubGroup === group.id && (
+                          <div className={styles.templateSubGroupItems}>
+                            {group.items.map((section, i) => (
+                              <React.Fragment key={i}>
+                                {section.osLabel && <span className={styles.templateOsLabel}>{section.osLabel}</span>}
+                                {section.suggestions.map((s, j) => (
+                                  <button key={j} className={styles.suggestion} onClick={() => setInputValue(s.prompt)} disabled={!isConnected}>
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1868,30 +2218,31 @@ export function AIAssistantDrawer({
                 </button>
                 {openTemplateGroup === 'post_exploitation' && (
                   <div className={styles.templateGroupItems}>
-                    <button className={styles.suggestion} onClick={() => setInputValue('After gaining access, search for passwords, API keys, config files, and database credentials on the server')} disabled={!isConnected}>
-                      Hunt for secrets and credentials on the server
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Dump password hashes from /etc/shadow and attempt to crack them offline')} disabled={!isConnected}>
-                      Dump and crack password hashes
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Check for privilege escalation vectors: SUID binaries, sudo misconfigurations, writable cron jobs, and kernel exploits')} disabled={!isConnected}>
-                      Find privilege escalation vectors
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Find database credentials on the server, connect to the database, and dump sensitive tables (users, credentials, PII)')} disabled={!isConnected}>
-                      Pivot to database and dump sensitive data
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Enumerate network interfaces, ARP tables, and routing to discover internal hosts, then attempt to pivot laterally')} disabled={!isConnected}>
-                      Map internal network and pivot laterally
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Enumerate all users on the system, collect SSH keys, bash history, and attempt lateral movement to other hosts')} disabled={!isConnected}>
-                      Harvest SSH keys and move laterally
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Establish persistence on the compromised server using a cron job, SSH key, or backdoor user account')} disabled={!isConnected}>
-                      Establish persistence on the server
-                    </button>
-                    <button className={styles.suggestion} onClick={() => setInputValue('Exploit the target web server and replace the homepage with a defacement page as proof of compromise')} disabled={!isConnected}>
-                      Deface the target homepage
-                    </button>
+                    {POST_EXPLOITATION_GROUPS.map(group => (
+                      <React.Fragment key={group.id}>
+                        <button
+                          className={`${styles.templateSubGroupHeader} ${openPostSubGroup === group.id ? styles.templateSubGroupHeaderOpen : ''}`}
+                          onClick={() => setOpenPostSubGroup(prev => prev === group.id ? null : group.id)}
+                        >
+                          <span>{group.title}</span>
+                          <ChevronDown size={12} className={styles.templateSubGroupChevron} />
+                        </button>
+                        {openPostSubGroup === group.id && (
+                          <div className={styles.templateSubGroupItems}>
+                            {group.items.map((section, i) => (
+                              <React.Fragment key={i}>
+                                {section.osLabel && <span className={styles.templateOsLabel}>{section.osLabel}</span>}
+                                {section.suggestions.map((s, j) => (
+                                  <button key={j} className={styles.suggestion} onClick={() => setInputValue(s.prompt)} disabled={!isConnected}>
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
+                    ))}
                   </div>
                 )}
               </div>

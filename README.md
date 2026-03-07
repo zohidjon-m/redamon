@@ -251,6 +251,7 @@ No rebuild needed — just restart.
   - [Remote Shells — Live Session Interaction](#remote-shells--live-session-interaction)
   - [CypherFix — Automated Vulnerability Remediation](#cypherfix--automated-vulnerability-remediation)
   - [Project Settings](#project-settings)
+  - [Insights Dashboard](#insights-dashboard)
 - [System Architecture](#system-architecture)
   - [High-Level Architecture](#high-level-architecture)
   - [Data Flow Pipeline](#data-flow-pipeline)
@@ -950,6 +951,14 @@ Every project in RedAmon has **180+ configurable parameters** across 11 setting 
 >
 > **Complete user guide:** See the **[RedAmon Wiki](https://github.com/samugit83/redamon/wiki)** for step-by-step instructions on creating users, projects, running scans, and using the AI agent.
 
+### Insights Dashboard
+
+The Insights page provides a real-time analytics dashboard for each project, covering attack chains, exploit successes, vulnerability severity, attack surface composition, and agent activity. All data is pulled directly from the Neo4j graph and presented through interactive charts and tables.
+
+<p align="center">
+  <img src="assets/insights.gif" alt="RedAmon Insights Dashboard" width="100%"/>
+</p>
+
 ### Target Guardrail
 
 RedAmon includes an LLM-based guardrail that prevents targeting unauthorized domains and IPs. It blocks government sites (`.gov`, `.mil`), major tech companies, financial institutions, social media platforms, and other well-known public services. The guardrail operates at two layers:
@@ -958,6 +967,8 @@ RedAmon includes an LLM-based guardrail that prevents targeting unauthorized dom
 - **Agent initialization** — the agent independently verifies the target scope on first run and refuses to operate if it detects an unauthorized target. Fails closed.
 
 For IP mode, public IPs are resolved via reverse DNS before evaluation. Private/RFC1918 IPs are auto-allowed.
+
+> **Important disclaimer:** The guardrail system is provided as a built-in safety layer to prevent accidental targeting of well-known websites and services that users almost certainly do not own (e.g., government domains, major tech platforms, financial institutions, social media networks). **Any modification, bypass, or removal of the guardrail code is done entirely at the user's own risk and sole responsibility.** The maintainers of RedAmon accept no liability for unauthorized scanning resulting from tampering with these protections.
 
 ---
 

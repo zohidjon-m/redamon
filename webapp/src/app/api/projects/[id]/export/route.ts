@@ -78,6 +78,12 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       orderBy: [{ conversationId: 'asc' }, { sequenceNum: 'asc' }],
     })
 
+    // 2b. Fetch remediations
+    const remediations = await prisma.remediation.findMany({
+      where: { projectId: id },
+      orderBy: { createdAt: 'asc' },
+    })
+
     // 3. Export Neo4j data
     let neo4jNodes: Array<{ labels: string[]; properties: Record<string, unknown>; _exportId: string }> = []
     let neo4jRelationships: Array<{ startExportId: string; endExportId: string; type: string; properties: Record<string, unknown> }> = []
@@ -138,6 +144,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       stats: {
         conversations: conversations.length,
         chatMessages: messages.length,
+        remediations: remediations.length,
         neo4jNodes: neo4jNodes.length,
         neo4jRelationships: neo4jRelationships.length,
         artifacts: 0,
@@ -166,6 +173,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     archive.append(Buffer.from(JSON.stringify(project, null, 2)), { name: 'project.json' })
     archive.append(Buffer.from(JSON.stringify(conversations, null, 2)), { name: 'conversations/conversations.json' })
     archive.append(Buffer.from(JSON.stringify(messages, null, 2)), { name: 'conversations/messages.json' })
+    archive.append(Buffer.from(JSON.stringify(remediations, null, 2)), { name: 'remediations/remediations.json' })
     archive.append(Buffer.from(JSON.stringify(neo4jNodes, null, 2)), { name: 'neo4j/nodes.json' })
     archive.append(Buffer.from(JSON.stringify(neo4jRelationships, null, 2)), { name: 'neo4j/relationships.json' })
 

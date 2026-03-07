@@ -3,16 +3,16 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Crosshair, FolderOpen, Shield, CircleHelp } from 'lucide-react'
+import { Crosshair, FolderOpen, Shield, CircleHelp, TrendingUp } from 'lucide-react'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { ProjectSelector } from './ProjectSelector'
 import { UserSelector } from './UserSelector'
 import styles from './GlobalHeader.module.css'
 
-const navItems = [
-  { label: 'Projects', href: '/projects', icon: <FolderOpen size={14} /> },
+const coreNav = [
   { label: 'Red Zone', href: '/graph', icon: <Crosshair size={14} /> },
   { label: 'CypherFix', href: '/cypherfix', icon: <Shield size={14} /> },
+  { label: 'Insights', href: '/insights', icon: <TrendingUp size={14} /> },
 ]
 
 export function GlobalHeader() {
@@ -30,14 +30,14 @@ export function GlobalHeader() {
       <div className={styles.spacer} />
 
       <div className={styles.actions}>
-        <nav className={styles.nav}>
-          {navItems.map(item => {
+        <nav className={styles.coreNav}>
+          {coreNav.map(item => {
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
+                className={`${styles.coreNavItem} ${isActive ? styles.coreNavItemActive : ''}`}
               >
                 {item.icon}
                 <span>{item.label}</span>
@@ -45,6 +45,14 @@ export function GlobalHeader() {
             )
           })}
         </nav>
+
+        <Link
+          href="/projects"
+          className={`${styles.navItem} ${pathname === '/projects' || pathname.startsWith('/projects/') ? styles.navItemActive : ''}`}
+        >
+          <FolderOpen size={14} />
+          <span>Projects</span>
+        </Link>
 
         <div className={styles.divider} />
 
