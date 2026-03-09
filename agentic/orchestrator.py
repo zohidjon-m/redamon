@@ -40,6 +40,7 @@ from orchestrator_helpers.nodes import (
     initialize_node,
     think_node,
     execute_tool_node,
+    execute_plan_node,
     generate_response_node,
     await_approval_node,
     process_approval_node,
@@ -221,10 +222,13 @@ class AgentOrchestrator:
             return await initialize_node(state, config, llm=self.llm, neo4j_creds=neo4j_creds)
 
         async def _think(state, config=None):
-            return await think_node(state, config, llm=self.llm, guidance_queues=self._guidance_queues, neo4j_creds=neo4j_creds)
+            return await think_node(state, config, llm=self.llm, guidance_queues=self._guidance_queues, neo4j_creds=neo4j_creds, streaming_callbacks=self._streaming_callbacks)
 
         async def _execute_tool(state, config=None):
             return await execute_tool_node(state, config, tool_executor=self.tool_executor, streaming_callbacks=self._streaming_callbacks, session_manager_base=_SESSION_MANAGER_BASE)
+
+        async def _execute_plan(state, config=None):
+            return await execute_plan_node(state, config, tool_executor=self.tool_executor, streaming_callbacks=self._streaming_callbacks, session_manager_base=_SESSION_MANAGER_BASE)
 
         async def _await_approval(state, config=None):
             return await await_approval_node(state, config)
@@ -244,6 +248,7 @@ class AgentOrchestrator:
         builder.add_node("initialize", _initialize)
         builder.add_node("think", _think)
         builder.add_node("execute_tool", _execute_tool)
+        builder.add_node("execute_plan", _execute_plan)
         builder.add_node("await_approval", _await_approval)
         builder.add_node("process_approval", _process_approval)
         builder.add_node("await_question", _await_question)
@@ -271,6 +276,7 @@ class AgentOrchestrator:
             self._route_after_think,
             {
                 "execute_tool": "execute_tool",
+                "execute_plan": "execute_plan",
                 "await_approval": "await_approval",
                 "await_question": "await_question",
                 "generate_response": "generate_response",
@@ -280,6 +286,7 @@ class AgentOrchestrator:
 
         # Tool execution flow — goes directly back to think (analysis merged into think node)
         builder.add_edge("execute_tool", "think")
+        builder.add_edge("execute_plan", "think")
 
         # Approval flow - pause for user input
         builder.add_edge("await_approval", END)
@@ -372,6 +379,12 @@ class AgentOrchestrator:
                 return "execute_tool"
             else:
                 logger.info("Transition ignored and no tool, generating response")
+                return "generate_response"
+        elif action == "plan_tools":
+            if decision.get("tool_plan"):
+                return "execute_plan"
+            else:
+                logger.warning(f"action=plan_tools but no tool_plan in decision, falling back to generate_response")
                 return "generate_response"
         elif action == "use_tool" and tool_name:
             return "execute_tool"
@@ -517,6 +530,15 @@ class AgentOrchestrator:
         if step:
             tool_used = step.get("tool_name")
             tool_output = step.get("tool_output")
+
+        # Check plan state if no single tool was found
+        plan = state.get("_current_plan")
+        if plan and not tool_used:
+            for s in reversed(plan.get("steps", [])):
+                if s.get("tool_name"):
+                    tool_used = s["tool_name"]
+                    tool_output = s.get("tool_output")
+                    break
 
         return InvokeResponse(
             answer=final_answer,

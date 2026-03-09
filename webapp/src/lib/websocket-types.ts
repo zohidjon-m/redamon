@@ -39,6 +39,9 @@ export enum MessageType {
   GUIDANCE_ACK = 'guidance_ack',
   STOPPED = 'stopped',
   FILE_READY = 'file_ready',
+  PLAN_START = 'plan_start',
+  PLAN_COMPLETE = 'plan_complete',
+  PLAN_ANALYSIS = 'plan_analysis',
 }
 
 // =============================================================================
@@ -103,12 +106,14 @@ export interface ThinkingChunkPayload {
 export interface ToolStartPayload {
   tool_name: string
   tool_args: Record<string, any>
+  wave_id?: string
 }
 
 export interface ToolOutputChunkPayload {
   tool_name: string
   chunk: string
   is_final: boolean
+  wave_id?: string
 }
 
 export interface ToolCompletePayload {
@@ -117,6 +122,21 @@ export interface ToolCompletePayload {
   output_summary: string
   actionable_findings: string[]
   recommended_next_steps: string[]
+  wave_id?: string
+}
+
+export interface PlanStartPayload {
+  wave_id: string
+  plan_rationale: string
+  tool_count: number
+  tools: string[]
+}
+
+export interface PlanCompletePayload {
+  wave_id: string
+  total_steps: number
+  successful: number
+  failed: number
 }
 
 export interface PhaseUpdatePayload {

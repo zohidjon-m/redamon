@@ -11,6 +11,7 @@ import { useState } from 'react'
 import styles from './AgentTimeline.module.css'
 import { ThinkingCard } from './ThinkingCard'
 import { ToolExecutionCard } from './ToolExecutionCard'
+import { PlanWaveCard } from './PlanWaveCard'
 import type { TodoItem } from '@/lib/websocket-types'
 
 export interface ThinkingItem {
@@ -41,7 +42,21 @@ export interface ToolExecutionItem {
   recommended_next_steps?: string[]
 }
 
-export type TimelineItem = ThinkingItem | ToolExecutionItem
+export interface PlanWaveItem {
+  type: 'plan_wave'
+  id: string
+  timestamp: Date
+  wave_id: string
+  plan_rationale: string
+  tool_count: number
+  tools: ToolExecutionItem[]
+  status: 'running' | 'success' | 'partial' | 'error'
+  interpretation?: string
+  actionable_findings?: string[]
+  recommended_next_steps?: string[]
+}
+
+export type TimelineItem = ThinkingItem | ToolExecutionItem | PlanWaveItem
 
 export interface AgentTimelineProps {
   items: TimelineItem[]
@@ -87,6 +102,12 @@ export function AgentTimeline({ items, isStreaming, onItemExpand }: AgentTimelin
             {/* Render appropriate card based on type */}
             {item.type === 'thinking' ? (
               <ThinkingCard
+                item={item}
+                isExpanded={isExpanded}
+                onToggleExpand={() => toggleExpand(item.id)}
+              />
+            ) : item.type === 'plan_wave' ? (
+              <PlanWaveCard
                 item={item}
                 isExpanded={isExpanded}
                 onToggleExpand={() => toggleExpand(item.id)}

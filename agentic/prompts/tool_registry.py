@@ -61,23 +61,17 @@ TOOL_REGISTRY = {
         ),
     },
     "execute_curl": {
-        "purpose": "HTTP requests & vuln probing",
-        "when_to_use": "Reachability checks + vulnerability testing as FALLBACK",
+        "purpose": "HTTP reachability checks",
+        "when_to_use": "Check if a web service is reachable, inspect HTTP headers/status",
         "args_format": '"args": "curl command arguments without \'curl\' prefix"',
         "description": (
-            '**execute_curl** (Reachability + Vulnerability Probing Fallback)\n'
+            '**execute_curl** (HTTP Reachability Checks)\n'
             '   - Make HTTP requests to targets\n'
-            '   - **PRIMARY USE:** Basic reachability checks (status code, headers)\n'
-            '   - **FALLBACK USE:** Vulnerability probing when query_graph returns NO vulnerability data for the target\n'
-            '     - Path traversal (e.g., `/../../../etc/passwd`)\n'
-            '     - LFI/RFI checks\n'
-            '     - Header injection, SSRF, open redirect probing\n'
-            '     - Version/banner fingerprinting for unidentified services\n'
-            '   - **WORKFLOW:** Always query_graph FIRST. Only use curl for vuln probing if graph has no relevant findings.\n'
-            '   - Example args: "-s -I http://target.com" (reachability check)\n'
+            '   - **USE FOR:** Reachability checks, HTTP status codes, response headers, banner identification\n'
+            '   - **DO NOT USE FOR:** Vulnerability probing or exploitation — use execute_nuclei instead\n'
+            '   - Example args: "-s -I http://target.com" (check headers)\n'
             '   - Example args: "-s http://target.com" (verify service responds)\n'
-            "   - Example args: \"-s -o /dev/null -w '%{{http_code}}' http://target.com/../../../../etc/passwd\" (path traversal probe)\n"
-            '   - Example args: "-s http://target.com/..;/manager/html" (Tomcat bypass probe)'
+            '   - Example args: "-s -o /dev/null -w \'%{{http_code}}\' http://target.com" (check status code)'
         ),
     },
     "execute_naabu": {

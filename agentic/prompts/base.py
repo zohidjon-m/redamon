@@ -96,32 +96,6 @@ def build_phase_definitions():
     return "\n".join(lines)
 
 
-def build_dynamic_rules(allowed_tools):
-    """Build the Important Rules section, including only rules for allowed tools."""
-    rules = [
-        "### Important Rules:",
-        "1. ALWAYS update the todo_list to track progress",
-        '2. Mark completed tasks as "completed"',
-        "3. Add new tasks when you discover them",
-        "4. Detect user INTENT - exploitation requests should be fast, research can be thorough",
-    ]
-
-    rule_num = 5
-
-    if "execute_curl" in allowed_tools:
-        rules.append(f"{rule_num}. **execute_curl usage rules:**")
-        rules.append("   - In informational phase: Use for reachability checks AND vulnerability probing as a FALLBACK")
-        if "query_graph" in allowed_tools:
-            rules.append("   - **Always query_graph FIRST** — only probe with curl if the graph has no vulnerability data for the target")
-        rules.append("   - Curl probing = lightweight discovery (path traversal, LFI, default endpoints, header checks)")
-        if "metasploit_console" in allowed_tools:
-            rules.append("   - Full exploitation (RCE, payload delivery, session establishment) ONLY in exploitation phase using metasploit_console")
-        rule_num += 1
-
-    rules.append(f"{rule_num}. **Add exploitation steps as TODO items** and mark them in_progress/completed as you go")
-
-    return "\n".join(rules)
-
 
 def build_attack_path_behavior(attack_path_type):
     """Build behavior rules for the ACTIVE attack path only.
@@ -337,16 +311,16 @@ Analyze the user's request to understand their intent:
 
 **Research Intent** - Keywords: "find", "show", "what", "list", "scan", "discover", "enumerate"
 - If the user wants information/recon, use the graph-first approach below
-- Query the graph for vulnerabilities first — if graph has no data, use curl to probe for common vulns
+- Query the graph for vulnerabilities first — if graph has no data, use execute_nuclei to scan for vulns
 
 ## Graph-First Approach (for Research)
 
 For RESEARCH requests, use Neo4j as the primary source:
 1. Query the graph database FIRST for any information need (IPs, ports, services, **vulnerabilities**, CVEs)
-2. Use execute_curl for reachability checks (basic HTTP status)
+2. Use execute_curl for reachability checks ONLY (basic HTTP status, headers)
 3. Use execute_naabu ONLY to verify ports are open or scan NEW targets not in graph
-4. If the graph has NO vulnerability data, use execute_curl to probe common vulns (path traversal, LFI, default endpoints)
-5. If the graph ALREADY HAS vulnerability data, do NOT duplicate testing with curl
+4. If the graph has NO vulnerability data, use execute_nuclei to scan for CVEs and vulnerabilities
+5. If the graph ALREADY HAS vulnerability data, do NOT duplicate testing
 """
 
 
@@ -442,9 +416,10 @@ Based on the context above, decide your next action. You MUST output valid JSON:
 {{
     "thought": "Your analysis of the current situation and what needs to be done next",
     "reasoning": "Why you chose this specific action over alternatives",
-    "action": "<one of: use_tool, transition_phase, complete, ask_user>",
+    "action": "<one of: use_tool, plan_tools, transition_phase, complete, ask_user>",
     "tool_name": "<only if action=use_tool: {tool_name_enum}>",
     "tool_args": "<only if action=use_tool: {{'question': '...'}} or {{'args': '...'}} or {{'command': '...'}}",
+    "tool_plan": "<only if action=plan_tools: see plan_tools example below>",
     "phase_transition": "<only if action=transition_phase>",
     "user_question": "<only if action=ask_user>",
     "completion_reason": "<only if action=complete>",
@@ -468,6 +443,12 @@ ask_user:
 {{"action": "ask_user", "user_question": {{"question": "Which exploit?", "context": "...", "format": "single_choice", "options": ["A", "B"]}}, ...}}
 ```
 
+plan_tools (run multiple INDEPENDENT tools as a wave — use when 2+ tools have NO dependencies):
+```json
+{{"action": "plan_tools", "tool_plan": {{"steps": [{{"tool_name": "execute_nmap", "tool_args": {{"target": "10.0.0.1", "args": "-sV"}}, "rationale": "Port discovery"}}, {{"tool_name": "query_graph", "tool_args": {{"question": "What is known about 10.0.0.1?"}}, "rationale": "Check existing intel"}}], "plan_rationale": "Independent tools, no dependency between them"}}, ...}}
+```
+Do NOT include tools that depend on another tool's output — plan those in the NEXT iteration after seeing results.
+
 complete: `{{"action": "complete", "completion_reason": "Successfully exploited target", ...}}`
 
 ### When to Use action="complete" (CRITICAL):
@@ -483,7 +464,12 @@ Use `action="complete"` when the **CURRENT objective** is achieved, NOT the enti
 
 {tool_args_section}
 
-{dynamic_rules}
+### Important Rules:
+1. ALWAYS update the todo_list to track progress
+2. Mark completed tasks as "completed"
+3. Add new tasks when you discover them
+4. Detect user INTENT - exploitation requests should be fast, research can be thorough
+5. **Add exploitation steps as TODO items** and mark them in_progress/completed as you go
 
 ### When to Ask User (action="ask_user"):
 Use ask_user ONLY when you need user input that cannot be determined from graph, tool output, target_info, or qa_history:
@@ -572,6 +558,52 @@ Always emit `service_identified` findings when new ports/services are discovered
 
 Only include fields in `extracted_info` that have new information. Exception: ALWAYS include `primary_target` — it is required for graph linking.
 Analyze the output FIRST, then decide your next action as usual.
+"""
+
+
+# =============================================================================
+# PENDING PLAN OUTPUTS SECTION (injected when a tool plan wave has completed)
+# =============================================================================
+
+PENDING_PLAN_OUTPUTS_SECTION = """
+## Plan Wave Outputs (MUST ANALYZE ALL)
+
+The following {n_tools} tools from your plan wave have completed. Analyze ALL outputs together and include an `output_analysis` in your JSON response.
+
+{tool_outputs_section}
+
+Your `output_analysis` should cover ALL tool outputs holistically. Use this EXACT schema:
+```json
+"output_analysis": {{
+    "interpretation": "Combined analysis of all tool outputs",
+    "extracted_info": {{
+        "primary_target": "IP or hostname (ALWAYS include — required for graph linking)",
+        "ports": [22, 8080],
+        "services": ["ssh", "http"],
+        "technologies": ["Apache/2.4.49"],
+        "vulnerabilities": ["CVE-2021-41773"],
+        "credentials": [],
+        "sessions": []
+    }},
+    "actionable_findings": ["Finding that requires follow-up"],
+    "recommended_next_steps": ["Suggested next action"],
+    "exploit_succeeded": false,
+    "exploit_details": null,
+    "chain_findings": [
+      {{
+        "finding_type": "<vulnerability_confirmed|credential_found|service_identified|configuration_found|custom>",
+        "severity": "<critical|high|medium|low|info>",
+        "title": "Short finding description",
+        "evidence": "Raw evidence excerpt from output",
+        "related_cves": ["CVE-XXXX-XXXXX"],
+        "confidence": 90
+      }}
+    ]
+}}
+```
+
+IMPORTANT: `extracted_info` field names must be EXACTLY: `primary_target`, `ports`, `services`, `technologies`, `vulnerabilities`, `credentials`, `sessions`. These are used for graph linking — wrong names will break connections.
+Then decide your next action as usual.
 """
 
 

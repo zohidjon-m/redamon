@@ -613,25 +613,29 @@ export default function GraphPage() {
   // Emergency Pause All — freezes every running pipeline and agent at once
   const isAnyPipelineRunning = isReconRunning || isGvmRunning || isGithubHuntRunning || isAgentRunning
   const [isEmergencyPausing, setIsEmergencyPausing] = useState(false)
-  const handleEmergencyPauseAll = useCallback(async () => {
-    setIsEmergencyPausing(true)
-    try {
-      const tasks: Promise<unknown>[] = []
-      if (reconState?.status === 'running' || reconState?.status === 'starting') {
-        tasks.push(pauseRecon())
-      }
-      if (gvmState?.status === 'running' || gvmState?.status === 'starting') {
-        tasks.push(pauseGvm())
-      }
-      if (githubHuntState?.status === 'running' || githubHuntState?.status === 'starting') {
-        tasks.push(pauseGithubHunt())
-      }
-      // Stop all running AI agent conversations
-      tasks.push(fetch('/api/agent/emergency-stop-all', { method: 'POST' }))
-      await Promise.allSettled(tasks)
-    } finally {
+
+  // Auto-clear the pausing state once all pipelines have actually stopped
+  useEffect(() => {
+    if (isEmergencyPausing && !isAnyPipelineRunning) {
       setIsEmergencyPausing(false)
     }
+  }, [isEmergencyPausing, isAnyPipelineRunning])
+
+  const handleEmergencyPauseAll = useCallback(async () => {
+    setIsEmergencyPausing(true)
+    const tasks: Promise<unknown>[] = []
+    if (reconState?.status === 'running' || reconState?.status === 'starting') {
+      tasks.push(pauseRecon())
+    }
+    if (gvmState?.status === 'running' || gvmState?.status === 'starting') {
+      tasks.push(pauseGvm())
+    }
+    if (githubHuntState?.status === 'running' || githubHuntState?.status === 'starting') {
+      tasks.push(pauseGithubHunt())
+    }
+    // Stop all running AI agent conversations
+    tasks.push(fetch('/api/agent/emergency-stop-all', { method: 'POST' }))
+    await Promise.allSettled(tasks)
   }, [reconState?.status, gvmState?.status, githubHuntState?.status, pauseRecon, pauseGvm, pauseGithubHunt])
 
   // Show message if no project is selected

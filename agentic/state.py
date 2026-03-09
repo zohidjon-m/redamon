@@ -197,7 +197,7 @@ class ObjectiveOutcome(BaseModel):
 # LLM RESPONSE MODELS (for structured parsing)
 # =============================================================================
 
-ActionType = Literal["use_tool", "transition_phase", "complete", "ask_user"]
+ActionType = Literal["use_tool", "plan_tools", "transition_phase", "complete", "ask_user"]
 
 
 class PhaseTransitionDecision(BaseModel):
@@ -258,6 +258,28 @@ class OutputAnalysisInline(BaseModel):
     chain_findings: List[ChainFindingExtract] = Field(default_factory=list)
 
 
+# =============================================================================
+# TOOL PLAN MODELS (for parallel tool execution)
+# =============================================================================
+
+class ToolPlanStep(BaseModel):
+    """Single step in a tool execution plan."""
+    tool_name: str
+    tool_args: dict = Field(default_factory=dict)
+    rationale: str = ""
+    # Filled after execution by execute_plan_node:
+    tool_output: Optional[str] = None
+    success: Optional[bool] = None
+    error_message: Optional[str] = None
+
+
+class ToolPlan(BaseModel):
+    """Wave of independent tools to execute in parallel."""
+    steps: List[ToolPlanStep]
+    plan_rationale: str = ""
+
+
+
 class LLMDecision(BaseModel):
     """
     Structured response from the ReAct think node.
@@ -287,6 +309,10 @@ class LLMDecision(BaseModel):
 
     # Output analysis (only present when analyzing previous tool output)
     output_analysis: Optional[OutputAnalysisInline] = Field(default=None)
+
+    # Tool plan fields (when action="plan_tools")
+    tool_plan: Optional[ToolPlan] = Field(default=None, description="Wave of independent tools to execute")
+
 
 
 class OutputAnalysis(BaseModel):
@@ -428,6 +454,9 @@ class AgentState(TypedDict):
     _abort_transition: bool  # True when user aborted a phase transition (routes to generate_response)
     _guardrail_blocked: bool  # True when project target was blocked by the scope guardrail
 
+    # Tool plan execution (parallel wave)
+    _current_plan: Optional[dict]  # ToolPlan.model_dump() with results after execution
+
     # Attack Chain memory (structured LLM context, populated alongside graph writes)
     chain_findings_memory: List[dict]    # Accumulated findings for this session
     chain_failures_memory: List[dict]    # Accumulated failures for this session
@@ -550,6 +579,7 @@ def create_initial_state(
         "_just_transitioned_to": None,
         "_abort_transition": False,
         "_guardrail_blocked": False,
+        "_current_plan": None,
         # Attack Chain memory
         "chain_findings_memory": [],
         "chain_failures_memory": [],

@@ -58,13 +58,9 @@ async def generate_response_node(
     # Determine response tier based on state signals (no LLM call)
     tier = determine_response_tier(
         execution_trace=state.get("execution_trace", []),
-        current_phase=state.get("current_phase", "informational"),
         attack_path_type=state.get("attack_path_type", "cve_exploit"),
-        phase_history=state.get("phase_history", []),
         target_info=state.get("target_info", {}),
         objective_history=state.get("objective_history", []),
-        current_objective_index=state.get("current_objective_index", 0),
-        conversation_objectives=state.get("conversation_objectives", []),
     )
 
     logger.info(f"[{user_id}/{project_id}/{session_id}] Generating final response (tier: {tier})...")

@@ -11,6 +11,7 @@ from .base import (
     MODE_DECISION_MATRIX,
     REACT_SYSTEM_PROMPT,
     PENDING_OUTPUT_ANALYSIS_SECTION,
+    PENDING_PLAN_OUTPUTS_SECTION,
     PHASE_TRANSITION_MESSAGE,
     USER_QUESTION_MESSAGE,
     FINAL_REPORT_PROMPT,
@@ -26,7 +27,6 @@ from .base import (
     build_tool_args_section,
     build_tool_name_enum,
     build_phase_definitions,
-    build_dynamic_rules,
 )
 
 # Re-export from classification
@@ -251,11 +251,11 @@ __all__ = [
     "build_tool_args_section",
     "build_tool_name_enum",
     "build_phase_definitions",
-    "build_dynamic_rules",
     # Base prompts
     "MODE_DECISION_MATRIX",
     "REACT_SYSTEM_PROMPT",
     "PENDING_OUTPUT_ANALYSIS_SECTION",
+    "PENDING_PLAN_OUTPUTS_SECTION",
     "PHASE_TRANSITION_MESSAGE",
     "USER_QUESTION_MESSAGE",
     "FINAL_REPORT_PROMPT",

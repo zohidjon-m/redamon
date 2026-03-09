@@ -447,7 +447,7 @@ GVM findings are stored as Vulnerability nodes (`source="gvm"`) in Neo4j, linked
 
 ### AI Agent Orchestrator
 
-The AI agent is a **LangGraph-based autonomous system** that implements the ReAct (Reasoning + Acting) pattern. It operates in a loop — reason about the current state, select and execute a tool, analyze the results, repeat — until the objective is complete or the user stops it.
+The AI agent is a **LangGraph-based autonomous system** that implements the ReAct (Reasoning + Acting) pattern. It operates in a loop — reason about the current state, select and execute a tool, analyze the results, repeat — until the objective is complete or the user stops it. When the agent identifies **independent tools** that don't depend on each other's outputs, it groups them into a **wave** and executes them in parallel via `asyncio.gather()`, then analyzes all outputs together — significantly reducing reconnaissance and exploitation time.
 
 #### Three Execution Phases
 
@@ -508,7 +508,7 @@ The agent executes security tools through the **Model Context Protocol**, with e
 | **metasploit_console** | Exploit execution, payload delivery, sessions | Exploitation & Post-exploitation |
 | **msf_restart** | Restart Metasploit RPC daemon when it becomes unresponsive | Exploitation & Post-exploitation |
 
-For long-running operations (e.g., Hydra brute force with large wordlists, Metasploit exploits), the agent streams progress updates every 5 seconds to the WebSocket, so you see output in real time.
+For long-running operations (e.g., Hydra brute force with large wordlists, Metasploit exploits), the agent streams progress updates every 5 seconds to the WebSocket, so you see output in real time. When running a **wave** (parallel tool plan), multiple tools stream output concurrently — the frontend groups them into a single PlanWaveCard with per-tool progress and a combined analysis after all tools complete.
 
 #### Kali Sandbox Tooling
 
@@ -1473,13 +1473,17 @@ stateDiagram-v2
 
     Reasoning --> ToolSelection: Analyze Task
     ToolSelection --> AwaitApproval: Dangerous Tool?
-    ToolSelection --> ToolExecution: Safe Tool
+    ToolSelection --> ToolExecution: Single Tool
+    ToolSelection --> WaveExecution: 2+ Independent Tools
 
     AwaitApproval --> ToolExecution: User Approves
     AwaitApproval --> Reasoning: User Rejects
 
     ToolExecution --> Observation: Execute MCP Tool
     Observation --> Reasoning: Analyze Results
+
+    WaveExecution --> WaveAnalysis: asyncio.gather() All Tools
+    WaveAnalysis --> Reasoning: Combined Analysis
 
     Reasoning --> Response: Task Complete
     Response --> Idle: Send to User
@@ -1494,6 +1498,7 @@ stateDiagram-v2
     state "Stopped" as Stopped
     Reasoning --> Stopped: User clicks Stop
     ToolExecution --> Stopped: User clicks Stop
+    WaveExecution --> Stopped: User clicks Stop
     Stopped --> Reasoning: User clicks Resume
 ```
 
@@ -1575,6 +1580,7 @@ Security tools exposed via Model Context Protocol for AI agent integration.
 
 LangGraph-based autonomous agent with ReAct pattern.
 
+- **Wave Execution**: Parallel tool execution via `asyncio.gather()` — when the LLM identifies independent tools, it groups them into a wave and runs them concurrently, then analyzes all outputs together
 - **WebSocket Streaming**: Real-time updates to frontend
 - **Phase-Aware Execution**: Human approval for dangerous operations
 - **Memory Persistence**: Conversation history via MemorySaver

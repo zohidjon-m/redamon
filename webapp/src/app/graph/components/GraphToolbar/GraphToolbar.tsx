@@ -213,9 +213,9 @@ export function GraphToolbar({
 
       <div className={styles.divider} />
       <button
-        className={styles.emergencyPauseButton}
+        className={`${styles.emergencyPauseButton} ${isEmergencyPausing ? styles.emergencyPauseButtonActive : ''}`}
         onClick={onEmergencyPauseAll}
-        disabled={!isAnyPipelineRunning || isEmergencyPausing}
+        disabled={!isAnyPipelineRunning && !isEmergencyPausing}
         title="EMERGENCY PAUSE — Freeze all running containers immediately. Use if scanning or exploiting unwanted targets."
       >
         {isEmergencyPausing ? (

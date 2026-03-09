@@ -5,7 +5,7 @@ import re
 import logging
 from typing import Optional, Tuple
 
-from state import LLMDecision, OutputAnalysis, ExtractedTargetInfo
+from state import LLMDecision, OutputAnalysis, ExtractedTargetInfo, ToolPlan
 from .json_utils import extract_json
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,18 @@ def _normalize_chain_findings(output_analysis: dict) -> None:
     for f in findings:
         if not isinstance(f, dict):
             continue
+        # Map alternative field names the LLM may use
+        if "type" in f and "finding_type" not in f:
+            f["finding_type"] = f.pop("type")
+        if "detail" in f and "title" not in f:
+            f["title"] = f.pop("detail")
+        if "description" in f and "title" not in f:
+            f["title"] = f.pop("description")
+        if "name" in f and "title" not in f:
+            f["title"] = f.pop("name")
+        # Skip findings with no meaningful title
+        if not f.get("title", "").strip() and not f.get("evidence", "").strip():
+            continue
         # Normalize finding_type to lowercase
         if "finding_type" in f:
             f["finding_type"] = str(f["finding_type"]).lower().strip()
@@ -122,6 +134,36 @@ def try_parse_llm_decision(response_text: str) -> Tuple[Optional[LLMDecision], O
         # Handle empty output_analysis object
         if "output_analysis" in data and (not data["output_analysis"] or data["output_analysis"] == {}):
             data["output_analysis"] = None
+
+        # Handle empty tool_plan object
+        if "tool_plan" in data and (not data["tool_plan"] or data["tool_plan"] == {}):
+            data["tool_plan"] = None
+
+        # Validate tool_plan when action is plan_tools
+        if data.get("action") == "plan_tools" and data.get("tool_plan"):
+            plan = data["tool_plan"]
+            steps = plan.get("steps", [])
+            if not steps:
+                # Downgrade to use_tool if plan is empty
+                data["action"] = "use_tool"
+                data["tool_plan"] = None
+                logger.warning("Empty tool_plan steps, downgrading to use_tool")
+            else:
+                # Ensure each step has a tool_name
+                valid_steps = [s for s in steps if isinstance(s, dict) and s.get("tool_name")]
+                if not valid_steps:
+                    data["action"] = "use_tool"
+                    data["tool_plan"] = None
+                    logger.warning("No valid steps in tool_plan, downgrading to use_tool")
+                else:
+                    plan["steps"] = valid_steps
+
+        # Normalize combined_summary → interpretation in output_analysis
+        if (data.get("output_analysis") and
+                isinstance(data["output_analysis"], dict) and
+                "combined_summary" in data["output_analysis"] and
+                "interpretation" not in data["output_analysis"]):
+            data["output_analysis"]["interpretation"] = data["output_analysis"].pop("combined_summary")
 
         # Pre-process extracted_info fields in output_analysis (same as parse_analysis_response)
         if (data.get("output_analysis") and

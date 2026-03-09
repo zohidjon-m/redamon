@@ -557,6 +557,14 @@
   cursor: not-allowed;
 }
 
+.emergencyPauseButtonActive {
+  background: var(--status-error);
+  border-color: var(--status-error);
+  color: white;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+  cursor: wait;
+}
+
 .emergencyPauseButton:focus-visible {
   outline: 2px solid var(--status-error);
   outline-offset: 2px;

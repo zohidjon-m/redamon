@@ -33,7 +33,7 @@ import { useConversations } from '@/hooks/useConversations'
 import { useChatPersistence } from '@/hooks/useChatPersistence'
 import type { Conversation } from '@/hooks/useConversations'
 import { Tooltip } from '@/components/ui/Tooltip/Tooltip'
-import type { ThinkingItem, ToolExecutionItem } from './AgentTimeline'
+import type { ThinkingItem, ToolExecutionItem, PlanWaveItem } from './AgentTimeline'
 
 type Phase = 'informational' | 'exploitation' | 'post_exploitation'
 
@@ -48,6 +48,7 @@ function extractTextFromChildren(children: any): string {
 }
 
 interface Message {
+  type: 'message'
   id: string
   role: 'user' | 'assistant'
   content: string
@@ -71,7 +72,7 @@ interface FileDownloadItem {
   source: string
 }
 
-type ChatItem = Message | ThinkingItem | ToolExecutionItem | FileDownloadItem
+type ChatItem = Message | ThinkingItem | ToolExecutionItem | PlanWaveItem | FileDownloadItem
 
 /** Format prefixed model names for display (e.g. "openrouter/meta-llama/llama-4" → "llama-4 (OR)") */
 function formatModelDisplay(model: string): string {
@@ -800,6 +801,7 @@ export function AIAssistantDrawer({
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isStopped, setIsStopped] = useState(false)
+  const [isStopping, setIsStopping] = useState(false)
   const [currentPhase, setCurrentPhase] = useState<Phase>('informational')
   const [attackPathType, setAttackPathType] = useState<string>('cve_exploit')
   const [iterationCount, setIterationCount] = useState(0)
@@ -940,25 +942,97 @@ export function AIAssistantDrawer({
         setIsStopped(false)
         break
 
-      case MessageType.TOOL_START:
-        // Add tool execution item to chat
-        const toolItem: ToolExecutionItem = {
-          type: 'tool_execution',
-          id: `tool-${Date.now()}-${itemIdCounter.current++}`,
+      case MessageType.PLAN_START: {
+        // Create a plan wave container with nested tools
+        const waveItem: PlanWaveItem = {
+          type: 'plan_wave',
+          id: `wave-${Date.now()}-${itemIdCounter.current++}`,
           timestamp: new Date(),
-          tool_name: message.payload.tool_name,
-          tool_args: message.payload.tool_args,
+          wave_id: message.payload.wave_id,
+          plan_rationale: message.payload.plan_rationale || '',
+          tool_count: message.payload.tool_count,
+          tools: [],
           status: 'running',
-          output_chunks: [],
         }
-        setChatItems(prev => [...prev, toolItem])
+        setChatItems(prev => [...prev, waveItem])
         setIsLoading(true)
         break
+      }
 
-      case MessageType.TOOL_OUTPUT_CHUNK:
-        // Append output chunk to the matching tool execution item (by tool_name)
+      case MessageType.TOOL_START: {
+        const wave_id = message.payload.wave_id
+        if (wave_id) {
+          // Nest tool inside matching PlanWaveItem
+          const nestedTool: ToolExecutionItem = {
+            type: 'tool_execution',
+            id: `tool-${Date.now()}-${itemIdCounter.current++}`,
+            timestamp: new Date(),
+            tool_name: message.payload.tool_name,
+            tool_args: message.payload.tool_args,
+            status: 'running',
+            output_chunks: [],
+          }
+          setChatItems(prev => {
+            const waveIndex = prev.findIndex(
+              item => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === wave_id
+            )
+            if (waveIndex !== -1) {
+              const waveItem = prev[waveIndex] as PlanWaveItem
+              return [
+                ...prev.slice(0, waveIndex),
+                { ...waveItem, tools: [...waveItem.tools, nestedTool] },
+                ...prev.slice(waveIndex + 1),
+              ]
+            }
+            // Fallback: add as standalone if wave not found
+            return [...prev, nestedTool]
+          })
+        } else {
+          // Standard single-tool execution
+          const toolItem: ToolExecutionItem = {
+            type: 'tool_execution',
+            id: `tool-${Date.now()}-${itemIdCounter.current++}`,
+            timestamp: new Date(),
+            tool_name: message.payload.tool_name,
+            tool_args: message.payload.tool_args,
+            status: 'running',
+            output_chunks: [],
+          }
+          setChatItems(prev => [...prev, toolItem])
+        }
+        setIsLoading(true)
+        break
+      }
+
+      case MessageType.TOOL_OUTPUT_CHUNK: {
+        const chunkWaveId = message.payload.wave_id
         setChatItems(prev => {
-          // Find the tool execution item by tool_name (handles any ordering)
+          if (chunkWaveId) {
+            // Find tool inside PlanWaveItem
+            const waveIndex = prev.findIndex(
+              item => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === chunkWaveId
+            )
+            if (waveIndex !== -1) {
+              const waveItem = prev[waveIndex] as PlanWaveItem
+              const toolIdx = waveItem.tools.findIndex(
+                t => t.tool_name === message.payload.tool_name && t.status === 'running'
+              )
+              if (toolIdx !== -1) {
+                const updatedTools = [...waveItem.tools]
+                updatedTools[toolIdx] = {
+                  ...updatedTools[toolIdx],
+                  output_chunks: [...updatedTools[toolIdx].output_chunks, message.payload.chunk],
+                }
+                return [
+                  ...prev.slice(0, waveIndex),
+                  { ...waveItem, tools: updatedTools },
+                  ...prev.slice(waveIndex + 1),
+                ]
+              }
+            }
+            return prev
+          }
+          // Standard single-tool chunk
           const toolIndex = prev.findIndex(
             item => 'type' in item &&
                     item.type === 'tool_execution' &&
@@ -979,36 +1053,125 @@ export function AIAssistantDrawer({
           return prev
         })
         break
+      }
 
-      case MessageType.TOOL_COMPLETE:
-        // Mark tool as complete and add rich analysis data
-        setChatItems(prev => {
-          // Find the tool execution item (may not be the last item due to message ordering)
-          const toolIndex = prev.findIndex(
-            item => 'type' in item &&
-                    item.type === 'tool_execution' &&
-                    item.tool_name === message.payload.tool_name &&
-                    item.status === 'running'
+      case MessageType.TOOL_COMPLETE: {
+        const completeWaveId = message.payload.wave_id
+        if (completeWaveId) {
+          // Update tool inside PlanWaveItem — do NOT setIsLoading(false), wait for PLAN_COMPLETE
+          setChatItems(prev => {
+            const waveIndex = prev.findIndex(
+              item => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === completeWaveId
+            )
+            if (waveIndex !== -1) {
+              const waveItem = prev[waveIndex] as PlanWaveItem
+              const toolIdx = waveItem.tools.findIndex(
+                t => t.tool_name === message.payload.tool_name && t.status === 'running'
+              )
+              if (toolIdx !== -1) {
+                const updatedTools = [...waveItem.tools]
+                const toolItem = updatedTools[toolIdx]
+                const elapsed = Date.now() - toolItem.timestamp.getTime()
+                updatedTools[toolIdx] = {
+                  ...toolItem,
+                  status: message.payload.success ? 'success' : 'error',
+                  final_output: message.payload.output_summary,
+                  actionable_findings: message.payload.actionable_findings || [],
+                  recommended_next_steps: message.payload.recommended_next_steps || [],
+                  duration: elapsed,
+                }
+                return [
+                  ...prev.slice(0, waveIndex),
+                  { ...waveItem, tools: updatedTools },
+                  ...prev.slice(waveIndex + 1),
+                ]
+              }
+            }
+            return prev
+          })
+        } else {
+          // Standard single-tool completion
+          setChatItems(prev => {
+            const toolIndex = prev.findIndex(
+              item => 'type' in item &&
+                      item.type === 'tool_execution' &&
+                      item.tool_name === message.payload.tool_name &&
+                      item.status === 'running'
+            )
+            if (toolIndex !== -1) {
+              const toolItem = prev[toolIndex] as ToolExecutionItem
+              const elapsed = Date.now() - toolItem.timestamp.getTime()
+              const updatedItem: ToolExecutionItem = {
+                ...toolItem,
+                status: message.payload.success ? 'success' : 'error',
+                final_output: message.payload.output_summary,
+                actionable_findings: message.payload.actionable_findings || [],
+                recommended_next_steps: message.payload.recommended_next_steps || [],
+                duration: elapsed,
+              }
+              return [
+                ...prev.slice(0, toolIndex),
+                updatedItem,
+                ...prev.slice(toolIndex + 1)
+              ]
+            }
+            return prev
+          })
+          setIsLoading(false)
+        }
+        break
+      }
+
+      case MessageType.PLAN_COMPLETE: {
+        // Mark wave as complete and set final status
+        // Do NOT setIsLoading(false) — think_node still needs to analyze wave outputs
+        // (the LLM call takes seconds). Loading state will be managed by THINKING/RESPONSE events.
+        setChatItems((prev: ChatItem[]) => {
+          const waveIndex = prev.findIndex(
+            (item: ChatItem) => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === message.payload.wave_id
           )
-          if (toolIndex !== -1) {
-            const toolItem = prev[toolIndex] as ToolExecutionItem
-            const updatedItem: ToolExecutionItem = {
-              ...toolItem,
-              status: message.payload.success ? 'success' : 'error',
-              final_output: message.payload.output_summary,
-              actionable_findings: message.payload.actionable_findings || [],
-              recommended_next_steps: message.payload.recommended_next_steps || [],
+          if (waveIndex !== -1) {
+            const waveItem = prev[waveIndex] as PlanWaveItem
+            let status: PlanWaveItem['status'] = 'success'
+            if (message.payload.failed === message.payload.total_steps) {
+              status = 'error'
+            } else if (message.payload.failed > 0) {
+              status = 'partial'
             }
             return [
-              ...prev.slice(0, toolIndex),
-              updatedItem,
-              ...prev.slice(toolIndex + 1)
+              ...prev.slice(0, waveIndex),
+              { ...waveItem, status },
+              ...prev.slice(waveIndex + 1),
             ]
           }
           return prev
         })
-        setIsLoading(false)
         break
+      }
+
+      case MessageType.PLAN_ANALYSIS: {
+        // Update PlanWaveItem with analysis from think_node
+        setChatItems(prev => {
+          const waveIndex = prev.findIndex(
+            (item: ChatItem) => 'type' in item && item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === message.payload.wave_id
+          )
+          if (waveIndex !== -1) {
+            const waveItem = prev[waveIndex] as PlanWaveItem
+            return [
+              ...prev.slice(0, waveIndex),
+              {
+                ...waveItem,
+                interpretation: message.payload.interpretation,
+                actionable_findings: message.payload.actionable_findings || [],
+                recommended_next_steps: message.payload.recommended_next_steps || [],
+              },
+              ...prev.slice(waveIndex + 1),
+            ]
+          }
+          return prev
+        })
+        break
+      }
 
       case MessageType.PHASE_UPDATE:
         setCurrentPhase(message.payload.current_phase as Phase)
@@ -1066,6 +1229,7 @@ export function AIAssistantDrawer({
         // Add agent response message with tier-aware badge
         const tier = message.payload.response_tier || (message.payload.task_complete ? 'full_report' : 'conversational')
         const assistantMessage: Message = {
+          type: 'message',
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: message.payload.answer,
@@ -1080,6 +1244,7 @@ export function AIAssistantDrawer({
 
       case MessageType.ERROR:
         const errorMessage: Message = {
+          type: 'message',
           id: `error-${Date.now()}`,
           role: 'assistant',
           content: 'An error occurred while processing your request.',
@@ -1092,6 +1257,7 @@ export function AIAssistantDrawer({
 
       case MessageType.TASK_COMPLETE:
         const completeMessage: Message = {
+          type: 'message',
           id: `complete-${Date.now()}`,
           role: 'assistant',
           content: message.payload.message,
@@ -1109,6 +1275,7 @@ export function AIAssistantDrawer({
       case MessageType.STOPPED:
         setIsLoading(false)
         setIsStopped(true)
+        setIsStopping(false)
         break
 
       case MessageType.FILE_READY:
@@ -1137,6 +1304,7 @@ export function AIAssistantDrawer({
       // Only show connection errors once, not for every retry
       if (error.message === 'Initial connection failed') {
         const errorMsg: Message = {
+          type: 'message',
           id: `error-${Date.now()}`,
           role: 'assistant',
           content: `Failed to connect to agent. Please check that the backend is running at ws://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8090/ws/agent`,
@@ -1164,6 +1332,7 @@ export function AIAssistantDrawer({
     if (isLoading) {
       // Agent is working → send as guidance
       const guidanceMessage: Message = {
+        type: 'message',
         id: `guidance-${Date.now()}`,
         role: 'user',
         content: question,
@@ -1177,6 +1346,7 @@ export function AIAssistantDrawer({
     } else {
       // Normal query
       const userMessage: Message = {
+        type: 'message',
         id: `user-${Date.now()}`,
         role: 'user',
         content: question,
@@ -1216,6 +1386,7 @@ export function AIAssistantDrawer({
 
     // Add decision message
     const decisionMessage: Message = {
+      type: 'message',
       id: `decision-${Date.now()}`,
       role: 'user',
       content: decision === 'approve'
@@ -1264,6 +1435,7 @@ export function AIAssistantDrawer({
 
     // Add answer message
     const answerMessage: Message = {
+      type: 'message',
       id: `answer-${Date.now()}`,
       role: 'user',
       content: `Answer: ${answer}`,
@@ -1288,12 +1460,14 @@ export function AIAssistantDrawer({
   }, [questionRequest, answerText, selectedOptions, sendAnswer, awaitingQuestion])
 
   const handleStop = useCallback(() => {
+    setIsStopping(true)
     sendStop()
   }, [sendStop])
 
   const handleResume = useCallback(() => {
     sendResume()
     setIsStopped(false)
+    setIsStopping(false)
     setIsLoading(true)
   }, [sendResume])
 
@@ -1454,6 +1628,81 @@ export function AIAssistantDrawer({
 
         lines.push('---')
         lines.push('')
+      } else if (item.type === 'plan_wave') {
+        const waveItem = item as PlanWaveItem
+        const time = waveItem.timestamp.toLocaleTimeString()
+        const statusIcon = waveItem.status === 'success' ? 'OK' : waveItem.status === 'error' ? 'FAIL' : waveItem.status === 'partial' ? 'PARTIAL' : 'RUNNING'
+        lines.push(`### Wave — ${waveItem.tool_count} tools  \`${time}\`  [${statusIcon}]`)
+        lines.push('')
+        if (waveItem.plan_rationale) {
+          lines.push(`> ${waveItem.plan_rationale}`)
+          lines.push('')
+        }
+        // Export each nested tool
+        waveItem.tools.forEach(tool => {
+          const toolStatusIcon = tool.status === 'success' ? 'OK' : tool.status === 'error' ? 'FAIL' : 'RUNNING'
+          lines.push(`#### Tool: \`${tool.tool_name}\`  [${toolStatusIcon}]`)
+          lines.push('')
+          if (tool.tool_args && Object.keys(tool.tool_args).length > 0) {
+            lines.push('**Arguments**')
+            lines.push('')
+            Object.entries(tool.tool_args).forEach(([key, value]) => {
+              lines.push(`- **${key}:** \`${typeof value === 'string' ? value : JSON.stringify(value)}\``)
+            })
+            lines.push('')
+          }
+          const rawOutput = tool.output_chunks.join('')
+          if (rawOutput) {
+            lines.push('<details>')
+            lines.push('<summary>Raw Output</summary>')
+            lines.push('')
+            lines.push('```')
+            lines.push(rawOutput)
+            lines.push('```')
+            lines.push('')
+            lines.push('</details>')
+            lines.push('')
+          }
+          if (tool.final_output) {
+            lines.push('**Analysis**')
+            lines.push('')
+            lines.push(tool.final_output)
+            lines.push('')
+          }
+          if (tool.actionable_findings && tool.actionable_findings.length > 0) {
+            lines.push('**Actionable Findings**')
+            lines.push('')
+            tool.actionable_findings.forEach(f => lines.push(`- ${f}`))
+            lines.push('')
+          }
+          if (tool.recommended_next_steps && tool.recommended_next_steps.length > 0) {
+            lines.push('**Recommended Next Steps**')
+            lines.push('')
+            tool.recommended_next_steps.forEach(s => lines.push(`- ${s}`))
+            lines.push('')
+          }
+        })
+        // Wave-level analysis
+        if (waveItem.interpretation) {
+          lines.push('**Analysis**')
+          lines.push('')
+          lines.push(waveItem.interpretation)
+          lines.push('')
+        }
+        if (waveItem.actionable_findings && waveItem.actionable_findings.length > 0) {
+          lines.push('**Actionable Findings**')
+          lines.push('')
+          waveItem.actionable_findings.forEach(f => lines.push(`- ${f}`))
+          lines.push('')
+        }
+        if (waveItem.recommended_next_steps && waveItem.recommended_next_steps.length > 0) {
+          lines.push('**Recommended Next Steps**')
+          lines.push('')
+          waveItem.recommended_next_steps.forEach(s => lines.push(`- ${s}`))
+          lines.push('')
+        }
+        lines.push('---')
+        lines.push('')
       } else if (item.type === 'file_download') {
         const time = item.timestamp.toLocaleTimeString()
         lines.push(`### File Download  \`${time}\``)
@@ -1545,6 +1794,7 @@ export function AIAssistantDrawer({
       if (msg.type === 'user_message' || msg.type === 'assistant_message') {
         const restoredTier = data.response_tier || (data.task_complete ? 'full_report' : undefined)
         return {
+          type: 'message',
           id: msg.id,
           role: msg.type === 'user_message' ? 'user' : 'assistant',
           content: data.content || '',
@@ -1566,6 +1816,8 @@ export function AIAssistantDrawer({
           updated_todo_list: [],
         } as ThinkingItem
       } else if (msg.type === 'tool_start') {
+        // Skip wave-owned tool_start — they're nested via post-pass
+        if (data.wave_id) return null
         // If a matching tool_complete exists, skip — full data comes from tool_complete
         const toolName = data.tool_name || ''
         const remaining = remainingCompletes.get(toolName) || 0
@@ -1585,12 +1837,23 @@ export function AIAssistantDrawer({
           output_chunks: [],
         } as ToolExecutionItem
       } else if (msg.type === 'tool_complete') {
+        // Skip wave-owned tool_complete — they're nested via post-pass
+        if (data.wave_id) return null
         // Reconstruct full ToolExecutionItem with raw output and tool_args
         const rawOutput = data.raw_output || ''
+        // Find matching tool_start for duration calculation
+        const matchingStart = full.messages.find(
+          (m: any) => m.type === 'tool_start' && (m.data as any)?.tool_name === data.tool_name
+            && !((m.data as any)?.wave_id)
+            && new Date(m.createdAt).getTime() < new Date(msg.createdAt).getTime()
+        )
+        const startTime = matchingStart ? new Date(matchingStart.createdAt) : undefined
+        const completeTime = new Date(msg.createdAt)
+        const duration = startTime ? completeTime.getTime() - startTime.getTime() : undefined
         return {
           type: 'tool_execution',
           id: msg.id,
-          timestamp: new Date(msg.createdAt),
+          timestamp: startTime || completeTime,
           tool_name: data.tool_name || '',
           tool_args: data.tool_args || {},
           status: data.success ? 'success' : 'error',
@@ -1598,9 +1861,11 @@ export function AIAssistantDrawer({
           final_output: data.output_summary,
           actionable_findings: data.actionable_findings || [],
           recommended_next_steps: data.recommended_next_steps || [],
+          duration,
         } as ToolExecutionItem
       } else if (msg.type === 'error') {
         return {
+          type: 'message',
           id: msg.id,
           role: 'assistant',
           content: 'An error occurred while processing your request.',
@@ -1609,6 +1874,7 @@ export function AIAssistantDrawer({
         } as Message
       } else if (msg.type === 'task_complete') {
         return {
+          type: 'message',
           id: msg.id,
           role: 'assistant',
           content: data.message || '',
@@ -1617,6 +1883,7 @@ export function AIAssistantDrawer({
         } as Message
       } else if (msg.type === 'guidance') {
         return {
+          type: 'message',
           id: msg.id,
           role: 'user',
           content: data.content || '',
@@ -1643,6 +1910,7 @@ export function AIAssistantDrawer({
         if (phase !== lastRenderedPhase) {
           lastRenderedPhase = phase
           return {
+            type: 'message',
             id: msg.id,
             role: 'assistant',
             content: `**Phase:** ${phase}` + (data.iteration_count ? ` — Step ${data.iteration_count}` : ''),
@@ -1660,6 +1928,7 @@ export function AIAssistantDrawer({
         if (data.planned_actions?.length) parts.push(`\n**Planned Actions:**\n${data.planned_actions.map((a: string) => `- ${a}`).join('\n')}`)
         if (data.risks?.length) parts.push(`\n**Risks:**\n${data.risks.map((r: string) => `- ${r}`).join('\n')}`)
         return {
+          type: 'message',
           id: msg.id,
           role: 'assistant',
           content: parts.join('\n'),
@@ -1676,6 +1945,7 @@ export function AIAssistantDrawer({
           ? `Modified: ${data.modification || ''}`
           : 'Aborted phase transition'
         return {
+          type: 'message',
           id: msg.id,
           role: 'user',
           content: label,
@@ -1689,6 +1959,7 @@ export function AIAssistantDrawer({
         if (data.context) qParts.push(`\n> ${data.context}`)
         if (data.options?.length) qParts.push(`\n**Options:**\n${data.options.map((o: string) => `- ${o}`).join('\n')}`)
         return {
+          type: 'message',
           id: msg.id,
           role: 'assistant',
           content: qParts.join('\n'),
@@ -1700,18 +1971,118 @@ export function AIAssistantDrawer({
         lastQuestionRequest = null
         hasWorkAfterQuestion = true
         return {
+          type: 'message',
           id: msg.id,
           role: 'user',
           content: `Answer: ${data.answer || ''}`,
           timestamp: new Date(msg.createdAt),
         } as Message
+      } else if (msg.type === 'plan_start') {
+        // Create empty PlanWaveItem shell — tools will be populated by tool_complete with wave_id
+        return {
+          type: 'plan_wave',
+          id: msg.id,
+          timestamp: new Date(msg.createdAt),
+          wave_id: data.wave_id || '',
+          plan_rationale: data.plan_rationale || '',
+          tool_count: data.tool_count || 0,
+          tools: [],
+          status: 'running',
+        } as PlanWaveItem
+      } else if (msg.type === 'plan_complete') {
+        // Skip — we handle plan_complete as a post-pass below
+        return null
       }
       // Skip unknown types
       return null
     }).filter((item): item is ChatItem => item !== null)
 
+    // Post-pass: nest tool_complete items with wave_id into their PlanWaveItem containers
+    // and apply plan_complete statuses (immutable updates — no direct mutation)
+    // Build a lookup of tool_start timestamps by wave_id:tool_name for duration calc
+    const waveToolStartTimes = new Map<string, Date>()
+    for (const msg of full.messages) {
+      if (msg.type === 'tool_start' && (msg.data as any)?.wave_id) {
+        const d = msg.data as any
+        waveToolStartTimes.set(`${d.wave_id}:${d.tool_name}`, new Date(msg.createdAt))
+      }
+    }
+
+    const waveToolCompletes = full.messages.filter(
+      (m: any) => m.type === 'tool_complete' && (m.data as any)?.wave_id
+    )
+    for (const msg of waveToolCompletes) {
+      const data = msg.data as any
+      const waveIdx = restored.findIndex(
+        item => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === data.wave_id
+      )
+      if (waveIdx !== -1) {
+        const wave = restored[waveIdx] as PlanWaveItem
+        const rawOutput = data.raw_output || ''
+        const startTime = waveToolStartTimes.get(`${data.wave_id}:${data.tool_name}`)
+        const completeTime = new Date(msg.createdAt)
+        const duration = startTime ? completeTime.getTime() - startTime.getTime() : undefined
+        restored[waveIdx] = {
+          ...wave,
+          tools: [...wave.tools, {
+            type: 'tool_execution' as const,
+            id: msg.id,
+            timestamp: startTime || completeTime,
+            tool_name: data.tool_name || '',
+            tool_args: data.tool_args || {},
+            status: (data.success ? 'success' : 'error') as 'success' | 'error',
+            output_chunks: rawOutput ? [rawOutput] : [],
+            final_output: data.output_summary,
+            actionable_findings: data.actionable_findings || [],
+            recommended_next_steps: data.recommended_next_steps || [],
+            duration,
+          }],
+        }
+      }
+    }
+
+    // Apply plan_complete statuses (immutable)
+    const planCompletes = full.messages.filter((m: any) => m.type === 'plan_complete')
+    for (const msg of planCompletes) {
+      const data = msg.data as any
+      const waveIdx = restored.findIndex(
+        item => item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === data.wave_id
+      )
+      if (waveIdx !== -1) {
+        const wave = restored[waveIdx] as PlanWaveItem
+        let status: PlanWaveItem['status'] = 'success'
+        if (data.failed === data.total_steps) {
+          status = 'error'
+        } else if (data.failed > 0) {
+          status = 'partial'
+        }
+        restored[waveIdx] = { ...wave, status }
+      }
+    }
+
+    // Apply plan_analysis data (immutable)
+    const planAnalyses = full.messages.filter((m: any) => m.type === 'plan_analysis')
+    for (const msg of planAnalyses) {
+      const data = msg.data as any
+      const waveIdx = restored.findIndex(
+        (item: ChatItem) => 'type' in item && item.type === 'plan_wave' && (item as PlanWaveItem).wave_id === data.wave_id
+      )
+      if (waveIdx !== -1) {
+        const wave = restored[waveIdx] as PlanWaveItem
+        restored[waveIdx] = {
+          ...wave,
+          interpretation: data.interpretation || '',
+          actionable_findings: data.actionable_findings || [],
+          recommended_next_steps: data.recommended_next_steps || [],
+        }
+      }
+    }
+
+    // Wave tool_complete items were already skipped in the map pass, so restored is final
+    const finalRestored = restored
+
     // Apply state
-    setChatItems(restored)
+    setChatItems(finalRestored)
     setConversationId(conv.id)
     setCurrentPhase((conv.currentPhase || 'informational') as Phase)
     setIterationCount(conv.iterationCount || 0)
@@ -1814,7 +2185,7 @@ export function AIAssistantDrawer({
         currentTimelineGroup = []
       }
       groupedChatItems.push({ type: 'file_download', content: item })
-    } else if ('type' in item && (item.type === 'thinking' || item.type === 'tool_execution')) {
+    } else if ('type' in item && (item.type === 'thinking' || item.type === 'tool_execution' || item.type === 'plan_wave')) {
       // It's a timeline item - add to current group
       currentTimelineGroup.push(item)
     }
@@ -2328,7 +2699,7 @@ export function AIAssistantDrawer({
             )
           } else {
             // Render timeline group
-            const items = groupItem.content as Array<ThinkingItem | ToolExecutionItem>
+            const items = groupItem.content as Array<ThinkingItem | ToolExecutionItem | PlanWaveItem>
             return (
               <AgentTimeline
                 key={`timeline-${index}`}
@@ -2563,18 +2934,19 @@ export function AIAssistantDrawer({
                 ? 'Send guidance to the agent...'
                 : 'Ask a question...'
             }
-            rows={1}
+            rows={2}
             disabled={awaitingApproval || awaitingQuestion || !isConnected || isStopped}
           />
           <div className={styles.inputActions}>
-            {(isLoading || isStopped) && (
+            {(isLoading || isStopped || isStopping) && (
               <button
                 className={`${styles.stopResumeButton} ${isStopped ? styles.resumeButton : styles.stopButton}`}
                 onClick={isStopped ? handleResume : handleStop}
-                aria-label={isStopped ? 'Resume agent' : 'Stop agent'}
-                title={isStopped ? 'Resume execution' : 'Stop execution'}
+                disabled={isStopping}
+                aria-label={isStopping ? 'Stopping...' : isStopped ? 'Resume agent' : 'Stop agent'}
+                title={isStopping ? 'Stopping...' : isStopped ? 'Resume execution' : 'Stop execution'}
               >
-                {isStopped ? <Play size={13} /> : <Square size={13} />}
+                {isStopping ? <Loader2 size={13} className={styles.spinner} /> : isStopped ? <Play size={13} /> : <Square size={13} />}
               </button>
             )}
             <button

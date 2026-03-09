@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
@@ -17,6 +18,7 @@ from state import (
     format_todo_list,
     format_qa_history,
     format_objective_history,
+    utc_now,
 )
 import orchestrator_helpers.chain_graph_writer as chain_graph
 from orchestrator_helpers.json_utils import json_dumps_safe, normalize_content
@@ -26,20 +28,20 @@ from project_settings import get_setting, get_allowed_tools_for_phase
 from prompts import (
     REACT_SYSTEM_PROMPT,
     PENDING_OUTPUT_ANALYSIS_SECTION,
+    PENDING_PLAN_OUTPUTS_SECTION,
     get_phase_tools,
     build_phase_definitions,
     build_informational_guidance,
     build_attack_path_behavior,
     build_tool_name_enum,
     build_tool_args_section,
-    build_dynamic_rules,
 )
 from tools import set_tenant_context, set_phase_context
 
 logger = logging.getLogger(__name__)
 
 
-async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_creds) -> dict:
+async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_creds, streaming_callbacks=None) -> dict:
     """
     Core ReAct reasoning node.
 
@@ -112,7 +114,6 @@ async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_c
         available_tools=available_tools,
         tool_name_enum=build_tool_name_enum(allowed_tools),
         tool_args_section=build_tool_args_section(allowed_tools),
-        dynamic_rules=build_dynamic_rules(allowed_tools),
         iteration=iteration,
         max_iterations=state.get("max_iterations", get_setting('MAX_ITERATIONS', 100)),
         objective=current_objective,
@@ -206,6 +207,38 @@ async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_c
         )
         system_prompt = system_prompt + "\n" + output_section
         logger.info(f"[{user_id}/{project_id}/{session_id}] Injected output analysis section for tool: {pending_step.get('tool_name')}")
+
+    # CHECK: Is there a pending plan wave to analyze?
+    pending_plan = state.get("_current_plan")
+    has_pending_plan_outputs = (
+        pending_plan
+        and pending_plan.get("steps")
+        and any(s.get("tool_output") is not None for s in pending_plan.get("steps", []))
+        and not pending_plan.get("_analyzed")
+    )
+
+    if has_pending_plan_outputs:
+        plan_steps = pending_plan.get("steps", [])
+        max_chars = get_setting('TOOL_OUTPUT_MAX_CHARS', 20000)
+        chars_per_tool = max(2000, max_chars // len(plan_steps))
+
+        # Build per-tool output sections
+        tool_outputs_parts = []
+        for i, s in enumerate(plan_steps):
+            output = (s.get("tool_output") or s.get("error_message") or "No output")[:chars_per_tool]
+            status = "OK" if s.get("success") else "FAILED"
+            tool_outputs_parts.append(
+                f"### Tool {i+1}: {s.get('tool_name', 'unknown')} ({status})\n"
+                f"Args: {json_dumps_safe(s.get('tool_args', {}))}\n"
+                f"Output:\n```\n{output}\n```"
+            )
+
+        plan_section = PENDING_PLAN_OUTPUTS_SECTION.format(
+            n_tools=len(plan_steps),
+            tool_outputs_section="\n\n".join(tool_outputs_parts),
+        )
+        system_prompt = system_prompt + "\n" + plan_section
+        logger.info(f"[{user_id}/{project_id}/{session_id}] Injected plan output analysis section for {len(plan_steps)} tools")
 
     # Drain pending guidance messages from user (per-session queue)
     guidance_messages = []
@@ -359,11 +392,18 @@ async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_c
     updates = {
         "current_iteration": iteration,
         "todo_list": todo_list,
-        "_current_step": step.model_dump(),
         "_decision": decision.model_dump(),
         "_just_transitioned_to": None,  # Clear the marker
         "_completed_step": None,  # Will be set if we process pending output
     }
+
+    # When action is plan_tools, set _current_plan instead of _current_step
+    if decision.action == "plan_tools" and decision.tool_plan:
+        updates["_current_step"] = None  # No single step — plan node handles streaming
+        updates["_current_plan"] = decision.tool_plan.model_dump()
+    else:
+        updates["_current_step"] = step.model_dump()
+        updates["_current_plan"] = None  # Clear any stale plan
 
     # Process output analysis if we had pending tool output
     if has_pending_output:
@@ -548,6 +588,227 @@ async def think_node(state: AgentState, config, *, llm, guidance_queues, neo4j_c
             execution_trace = state.get("execution_trace", []) + [pending_step]
             updates["execution_trace"] = execution_trace
             updates["_completed_step"] = pending_step
+
+    # Process plan wave outputs — uses same output_analysis as single-tool path
+    if has_pending_plan_outputs:
+        plan_steps = pending_plan.get("steps", [])
+        analysis = decision.output_analysis  # Same field as single-tool
+        plan_iteration = iteration - 1
+
+        merged_target = TargetInfo(**state.get("target_info", {}))
+        chain_findings_mem = list(state.get("chain_findings_memory", []))
+        chain_failures_mem = list(state.get("chain_failures_memory", []))
+        new_trace_entries = []
+
+        if analysis:
+            logger.info(f"\n{'='*60}")
+            logger.info(f"PLAN OUTPUT ANALYSIS (combined) - {len(plan_steps)} tools")
+            logger.info(f"{'='*60}")
+            logger.info(f"  INTERPRETATION: {analysis.interpretation[:200]}")
+
+            # Single target info merge from combined extracted_info
+            extracted = analysis.extracted_info
+            new_target = TargetInfo(
+                primary_target=extracted.primary_target,
+                ports=extracted.ports, services=extracted.services,
+                technologies=extracted.technologies,
+                vulnerabilities=extracted.vulnerabilities,
+                credentials=extracted.credentials, sessions=extracted.sessions,
+            )
+            merged_target = merged_target.merge_from(new_target)
+
+            # Chain findings (once, from combined analysis)
+            if analysis.chain_findings:
+                for cf in analysis.chain_findings:
+                    finding_dict = cf.model_dump() if hasattr(cf, 'model_dump') else (cf if isinstance(cf, dict) else {})
+                    finding_dict["step_iteration"] = plan_iteration
+                    chain_findings_mem.append(finding_dict)
+            elif analysis.actionable_findings:
+                # Fallback: promote actionable_findings to chain_findings_memory
+                for af_text in analysis.actionable_findings:
+                    chain_findings_mem.append({
+                        "finding_type": "custom",
+                        "severity": "info",
+                        "title": af_text[:200],
+                        "evidence": "",
+                        "step_iteration": plan_iteration,
+                        "confidence": 60,
+                    })
+
+            # Exploit success
+            if analysis.exploit_succeeded and analysis.exploit_details:
+                details = analysis.exploit_details
+                chain_findings_mem.append({
+                    "finding_type": "exploit_success", "severity": "critical",
+                    "title": f"Exploit success: {details.get('evidence', '')[:100]}",
+                    "evidence": details.get("evidence", ""),
+                    "step_iteration": plan_iteration, "confidence": 95,
+                    "related_cves": details.get("cve_ids", []),
+                    "related_ips": [details.get("target_ip", "")] if details.get("target_ip") else [],
+                })
+
+            logger.info(f"{'='*60}\n")
+
+            # Emit plan_analysis to frontend so PlanWaveCard shows Analysis/Findings/NextSteps
+            wave_id = pending_plan.get("wave_id")
+            if wave_id and streaming_callbacks:
+                streaming_cb = streaming_callbacks.get(session_id)
+                if streaming_cb:
+                    try:
+                        await streaming_cb.on_plan_analysis(
+                            wave_id=wave_id,
+                            interpretation=analysis.interpretation,
+                            actionable_findings=analysis.actionable_findings or [],
+                            recommended_next_steps=analysis.recommended_next_steps or [],
+                        )
+                    except Exception as e:
+                        logger.warning(f"Error emitting plan_analysis: {e}")
+        else:
+            logger.warning(f"[{user_id}/{project_id}/{session_id}] No output_analysis for wave, using fallback for {len(plan_steps)} tools")
+
+        # Create one ExecutionStep per plan tool (for trace granularity)
+        # Use sync writes so each step exists before the next links to it
+        prev_chain_step_id = state.get("_last_chain_step_id")
+        loop = asyncio.get_running_loop()
+
+        # Combined extracted_info for all wave tools (same for each — wave has one analysis)
+        combined_extracted = {}
+        if analysis and analysis.extracted_info:
+            combined_extracted = analysis.extracted_info.model_dump() if hasattr(analysis.extracted_info, 'model_dump') else {}
+
+        for i, plan_step in enumerate(plan_steps):
+            step_id = uuid4().hex[:8]
+            step_thought = f"[Wave] {plan_step.get('rationale', '')}"
+            step_reasoning = pending_plan.get("plan_rationale", "")
+            step_output_analysis = analysis.interpretation if analysis else (plan_step.get("tool_output") or "")[:20000]
+
+            exec_step = {
+                "step_id": step_id,
+                "iteration": plan_iteration,
+                "timestamp": utc_now().isoformat(),
+                "phase": phase,
+                "thought": step_thought,
+                "reasoning": step_reasoning,
+                "tool_name": plan_step.get("tool_name"),
+                "tool_args": plan_step.get("tool_args"),
+                "tool_output": plan_step.get("tool_output"),
+                "success": plan_step.get("success", False),
+                "error_message": plan_step.get("error_message"),
+                "output_analysis": step_output_analysis,
+                "actionable_findings": (analysis.actionable_findings or []) if analysis else [],
+                "recommended_next_steps": (analysis.recommended_next_steps or []) if analysis else [],
+            }
+            new_trace_entries.append(exec_step)
+
+            # Chain failure per failed tool (memory + Neo4j)
+            if not plan_step.get("success"):
+                chain_failures_mem.append({
+                    "step_iteration": plan_iteration,
+                    "failure_type": "tool_error",
+                    "tool_name": plan_step.get("tool_name", ""),
+                    "error_message": plan_step.get("error_message", ""),
+                    "lesson_learned": analysis.interpretation[:300] if analysis else "",
+                })
+
+            # Neo4j chain step (sync so prev_step_id linkage is sequential)
+            # Capture all loop variables via default args to avoid closure issues
+            await loop.run_in_executor(
+                None,
+                lambda _sid=step_id, _prev=prev_chain_step_id, _ps=plan_step,
+                       _ei=combined_extracted, _thought=step_thought,
+                       _reasoning=step_reasoning, _oa=step_output_analysis: chain_graph.sync_record_step(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    step_id=_sid,
+                    chain_id=session_id,
+                    prev_step_id=_prev,
+                    user_id=user_id, project_id=project_id,
+                    iteration=plan_iteration, phase=phase,
+                    tool_name=_ps.get("tool_name", ""),
+                    tool_args_summary=str(_ps.get("tool_args", {}))[:500],
+                    thought=_thought[:20000],
+                    reasoning=_reasoning[:20000],
+                    output_summary=(_ps.get("tool_output") or "")[:20000],
+                    output_analysis=_oa[:20000],
+                    success=_ps.get("success", False),
+                    error_message=_ps.get("error_message"),
+                    extracted_info=_ei,
+                ),
+            )
+            # Update prev for next tool in wave (sequential chain linkage)
+            prev_chain_step_id = step_id
+
+            # Neo4j ChainFailure node for failed tools (mirrors single-tool path)
+            if not plan_step.get("success"):
+                chain_graph.fire_record_failure(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    chain_id=session_id, step_id=step_id,
+                    user_id=user_id, project_id=project_id,
+                    failure_type="tool_error",
+                    tool_name=plan_step.get("tool_name", ""),
+                    error_message=plan_step.get("error_message", ""),
+                    lesson_learned=analysis.interpretation[:20000] if analysis else "",
+                    phase=phase,
+                    iteration=plan_iteration,
+                )
+
+        # Neo4j exploit success (mirrors single-tool path)
+        if analysis and analysis.exploit_succeeded and analysis.exploit_details and phase == "exploitation":
+            last_step_id = new_trace_entries[-1]["step_id"] if new_trace_entries else None
+            if last_step_id:
+                details = analysis.exploit_details
+                try:
+                    chain_graph.fire_record_exploit_success(
+                        neo4j_uri, neo4j_user, neo4j_password,
+                        chain_id=session_id,
+                        step_id=last_step_id,
+                        user_id=user_id,
+                        project_id=project_id,
+                        attack_type=details.get("attack_type", state.get("attack_path_type", "cve_exploit")),
+                        target_ip=details.get("target_ip", merged_target.primary_target),
+                        target_port=details.get("target_port"),
+                        cve_ids=details.get("cve_ids", merged_target.vulnerabilities),
+                        session_id=details.get("session_id"),
+                        username=details.get("username"),
+                        password_found=details.get("password"),
+                        evidence=details.get("evidence", ""),
+                        execution_trace=state.get("execution_trace", []) + new_trace_entries,
+                        iteration=plan_iteration,
+                    )
+                    logger.info(f"[{user_id}/{project_id}/{session_id}] Wave exploit success detected - ChainFinding created")
+                except Exception as e:
+                    logger.error(f"[{user_id}/{project_id}/{session_id}] Failed to record wave exploit success: {e}")
+
+        # Neo4j chain findings (linked to last step — step already exists from sync write)
+        if analysis and new_trace_entries:
+            last_step_id = new_trace_entries[-1]["step_id"]
+            # Skip exploit-related findings if exploit success already recorded (mirrors single-tool)
+            _EXPLOIT_OVERLAP_TYPES = {"exploit_success", "access_gained", "credential_found"}
+            for cf in (analysis.chain_findings or []):
+                if analysis.exploit_succeeded and cf.finding_type in _EXPLOIT_OVERLAP_TYPES:
+                    continue
+                chain_graph.fire_record_finding(
+                    neo4j_uri, neo4j_user, neo4j_password,
+                    chain_id=session_id, step_id=last_step_id,
+                    user_id=user_id, project_id=project_id,
+                    finding_type=cf.finding_type, severity=cf.severity,
+                    title=cf.title, evidence=cf.evidence,
+                    confidence=cf.confidence, phase=phase,
+                    iteration=plan_iteration,
+                    related_cves=cf.related_cves, related_ips=cf.related_ips,
+                )
+
+        # Update state
+        updates["execution_trace"] = state.get("execution_trace", []) + new_trace_entries
+        updates["target_info"] = merged_target.model_dump()
+        updates["chain_findings_memory"] = chain_findings_mem
+        updates["chain_failures_memory"] = chain_failures_mem
+        if not (decision.action == "plan_tools" and decision.tool_plan):
+            updates["_current_plan"] = None
+        if new_trace_entries:
+            updates["_last_chain_step_id"] = new_trace_entries[-1]["step_id"]
+        tool_summary = ", ".join(f"{s.get('tool_name')}({'OK' if s.get('success') else 'FAIL'})" for s in plan_steps)
+        overall = analysis.interpretation if analysis else "Plan wave completed"
+        updates["messages"] = [AIMessage(content=f"**Wave** [{phase}] {tool_summary}\n\n{overall}")]
 
     # Handle different actions
     if decision.action == "complete":

@@ -66,6 +66,9 @@ class MessageType(str, Enum):
     GUIDANCE_ACK = "guidance_ack"
     STOPPED = "stopped"
     FILE_READY = "file_ready"
+    PLAN_START = "plan_start"
+    PLAN_COMPLETE = "plan_complete"
+    PLAN_ANALYSIS = "plan_analysis"
 
 
 # =============================================================================
@@ -376,27 +379,34 @@ class StreamingCallback:
         })
         # Don't persist chunks — they are partial data; the full thinking is persisted via on_thinking
 
-    async def on_tool_start(self, tool_name: str, tool_args: dict):
+    async def on_tool_start(self, tool_name: str, tool_args: dict, wave_id: str = None):
         """Called when tool execution starts"""
         payload = {
             "tool_name": tool_name,
             "tool_args": tool_args
         }
+        if wave_id:
+            payload["wave_id"] = wave_id
         await self.connection.send_message(MessageType.TOOL_START, payload)
         self._persist("tool_start", payload)
         # Initialize accumulator for this tool's output chunks
-        self._tool_context[tool_name] = {"args": tool_args, "chunks": []}
+        ctx_key = f"{wave_id}:{tool_name}" if wave_id else tool_name
+        self._tool_context[ctx_key] = {"args": tool_args, "chunks": []}
 
-    async def on_tool_output_chunk(self, tool_name: str, chunk: str, is_final: bool = False):
+    async def on_tool_output_chunk(self, tool_name: str, chunk: str, is_final: bool = False, wave_id: str = None):
         """Called when tool outputs data chunk"""
-        await self.connection.send_message(MessageType.TOOL_OUTPUT_CHUNK, {
+        payload = {
             "tool_name": tool_name,
             "chunk": chunk,
             "is_final": is_final
-        })
+        }
+        if wave_id:
+            payload["wave_id"] = wave_id
+        await self.connection.send_message(MessageType.TOOL_OUTPUT_CHUNK, payload)
         # Accumulate chunks — they'll be joined and included in tool_complete
-        if tool_name in self._tool_context:
-            self._tool_context[tool_name]["chunks"].append(chunk)
+        ctx_key = f"{wave_id}:{tool_name}" if wave_id else tool_name
+        if ctx_key in self._tool_context:
+            self._tool_context[ctx_key]["chunks"].append(chunk)
 
     async def on_tool_complete(
         self,
@@ -405,6 +415,7 @@ class StreamingCallback:
         output_summary: str,
         actionable_findings: list = None,
         recommended_next_steps: list = None,
+        wave_id: str = None,
     ):
         """Called when tool execution completes"""
         payload = {
@@ -414,15 +425,52 @@ class StreamingCallback:
             "actionable_findings": actionable_findings or [],
             "recommended_next_steps": recommended_next_steps or [],
         }
+        if wave_id:
+            payload["wave_id"] = wave_id
         await self.connection.send_message(MessageType.TOOL_COMPLETE, payload)
         # Include accumulated raw output and tool_args in persisted payload
-        ctx = self._tool_context.pop(tool_name, {})
+        ctx_key = f"{wave_id}:{tool_name}" if wave_id else tool_name
+        ctx = self._tool_context.pop(ctx_key, {})
         persist_payload = {
             **payload,
             "tool_args": ctx.get("args", {}),
             "raw_output": "".join(ctx.get("chunks", [])),
         }
         self._persist("tool_complete", persist_payload)
+
+    async def on_plan_start(self, wave_id: str, plan_rationale: str, tools: list):
+        """Called when a tool plan wave starts executing."""
+        payload = {
+            "wave_id": wave_id,
+            "plan_rationale": plan_rationale,
+            "tool_count": len(tools),
+            "tools": tools,
+        }
+        await self.connection.send_message(MessageType.PLAN_START, payload)
+        self._persist("plan_start", payload)
+
+    async def on_plan_complete(self, wave_id: str, total: int, successful: int, failed: int):
+        """Called when a tool plan wave finishes executing."""
+        payload = {
+            "wave_id": wave_id,
+            "total_steps": total,
+            "successful": successful,
+            "failed": failed,
+        }
+        await self.connection.send_message(MessageType.PLAN_COMPLETE, payload)
+        self._persist("plan_complete", payload)
+
+    async def on_plan_analysis(self, wave_id: str, interpretation: str,
+                               actionable_findings: list, recommended_next_steps: list):
+        """Called when think_node finishes analyzing a wave's outputs."""
+        payload = {
+            "wave_id": wave_id,
+            "interpretation": interpretation,
+            "actionable_findings": actionable_findings or [],
+            "recommended_next_steps": recommended_next_steps or [],
+        }
+        await self.connection.send_message(MessageType.PLAN_ANALYSIS, payload)
+        self._persist("plan_analysis", payload)
 
     async def on_phase_update(self, current_phase: str, iteration_count: int, attack_path_type: str = "cve_exploit"):
         """Called when phase changes"""
