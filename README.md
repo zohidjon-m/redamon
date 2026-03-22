@@ -282,6 +282,30 @@ A fully automated, **parallelized** scanning engine running inside a Kali Linux 
   <img src="assets/recon.gif" alt="RedAmon Reconnaissance Pipeline" width="100%"/>
 </p>
 
+| Group | Phase | Tools | Type | Execution |
+|:-----:|-------|-------|:----:|-----------|
+| **1** | **Domain Discovery** | crt.sh, HackerTarget, Subfinder, Amass, Knockpy | Passive* | 5 tools parallel |
+| | **Wildcard Filtering** | Puredns | Active | Sequential |
+| | **DNS Resolution** | dnspython | Passive | 20 parallel workers |
+| | **WHOIS + URLScan** | python-whois, URLScan.io API | Passive | Parallel |
+| **3** | **Port Scanning** | Naabu | Active | Parallel with Shodan |
+| | **OSINT Enrichment** | Shodan / InternetDB | Passive | Parallel with Naabu |
+| **4** | **HTTP Probing** | httpx | Active | Internal parallel |
+| | **Tech Detection** | Wappalyzer | Passive | Sequential (post-probe) |
+| | **Banner Grabbing** | Custom (Python sockets: SSH, FTP, SMTP, MySQL, etc.) | Active | Parallel workers |
+| **5** | **Web Crawling** | Katana, Hakrawler | Active | Parallel |
+| | **Archive Discovery** | GAU (Wayback, CommonCrawl, OTX) | Passive | Parallel with crawlers |
+| | **JS Analysis** | jsluice | Passive | Sequential (post-crawl) |
+| | **Directory Fuzzing** | FFuf | Active | Sequential (post-jsluice) |
+| | **Parameter Discovery** | Arjun | Active | Methods parallel (GET/POST/JSON/XML) |
+| | **API Discovery** | Kiterunner | Active | Sequential per wordlist |
+| **6** | **Vulnerability Scanning** | Nuclei (9,000+ templates + DAST) | Active | Internal parallel |
+| | **Security Checks** | WAF bypass, direct IP access, TLS expiry, missing headers, cache-control | Active | Parallel workers |
+| | **CVE Enrichment** | NVD API, Vulners API | Passive | Sequential |
+| | **MITRE Enrichment** | CWE / CAPEC mapping | Passive | Sequential |
+
+<sub>*Amass can run in active mode when configured. Knockpy performs active DNS probing.</sub>
+
 ### GVM Vulnerability Scanner
 
 **GVM/OpenVAS** performs deep network-level vulnerability assessment with 170,000+ NVTs — probing services at the protocol layer for misconfigurations, outdated software, default credentials, and known CVEs. Complements Nuclei's web-layer findings. Seven pre-configured scan profiles from quick host discovery (~2 min) to exhaustive deep scanning (~8 hours). Findings are stored as Vulnerability nodes in Neo4j alongside the recon graph.
