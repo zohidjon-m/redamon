@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -24,7 +23,7 @@ export function SecurityChecksSection({ data, updateField }: SecurityChecksSecti
         <h2 className={styles.sectionTitle}>
           <ShieldCheck size={16} />
           Security Checks
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.SecurityChecks} />
+          <NodeInfoTooltip section="SecurityChecks" />
           <span className={styles.badgeActive}>Active</span>
         </h2>
         <div className={styles.sectionHeaderRight}>

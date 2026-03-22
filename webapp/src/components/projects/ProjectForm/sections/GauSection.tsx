@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 import { TimeEstimate } from '../TimeEstimate'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
@@ -36,7 +35,7 @@ export function GauSection({ data, updateField }: GauSectionProps) {
         <h2 className={styles.sectionTitle}>
           <Link size={16} />
           GAU (GetAllUrls) Passive Discovery
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.Gau} />
+          <NodeInfoTooltip section="Gau" />
           <span className={styles.badgePassive}>Passive</span>
         </h2>
         <div className={styles.sectionHeaderRight}>

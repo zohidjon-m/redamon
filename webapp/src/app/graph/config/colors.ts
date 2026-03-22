@@ -69,7 +69,7 @@ export const SEVERITY_COLORS_CVE: Record<string, string> = {
   medium: '#be185d',    // Medium pink-red (pink-700)
   low: '#831843',       // Dark pink-red (pink-900)
   info: '#831843',      // Dark pink-red (pink-900)
-  unknown: '#6b7280',   // Grey for unknown
+  unknown: '#831843',   // Dark pink-red - CVEs are always threats, even without severity data
 }
 
 // Link colors

@@ -2,20 +2,34 @@
 
 import { Waypoints } from 'lucide-react'
 import { Tooltip } from '@/components/ui'
+import { SECTION_NODE_MAP, SECTION_INPUT_MAP } from './nodeMapping'
 import styles from './ProjectForm.module.css'
 
 interface NodeInfoTooltipProps {
-  nodes: string[]
+  section: string
 }
 
-export function NodeInfoTooltip({ nodes }: NodeInfoTooltipProps) {
-  if (!nodes.length) return null
+export function NodeInfoTooltip({ section }: NodeInfoTooltipProps) {
+  const inputNodes = SECTION_INPUT_MAP[section] ?? []
+  const outputNodes = SECTION_NODE_MAP[section] ?? []
+
+  if (!inputNodes.length && !outputNodes.length) return null
 
   const content = (
     <div className={styles.nodeInfoContent}>
-      <span className={styles.nodeInfoLabel}>Graph Nodes</span>
+      {inputNodes.length > 0 && (
+        <>
+          <span className={styles.nodeInfoLabel}>Consumes</span>
+          <div className={styles.nodeInfoPills}>
+            {inputNodes.map(node => (
+              <span key={node} className={styles.nodeInfoPillInput}>{node}</span>
+            ))}
+          </div>
+        </>
+      )}
+      <span className={styles.nodeInfoLabel}>Produces</span>
       <div className={styles.nodeInfoPills}>
-        {nodes.map(node => (
+        {outputNodes.map(node => (
           <span key={node} className={styles.nodeInfoPill}>{node}</span>
         ))}
       </div>

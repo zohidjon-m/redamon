@@ -262,6 +262,20 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'FFUF_CUSTOM_HEADERS': [],
     'FFUF_SMART_FUZZ': True,
 
+    # Arjun Parameter Discovery
+    'ARJUN_ENABLED': False,
+    'ARJUN_THREADS': 2,
+    'ARJUN_TIMEOUT': 15,
+    'ARJUN_SCAN_TIMEOUT': 600,
+    'ARJUN_METHODS': ['GET'],
+    'ARJUN_MAX_ENDPOINTS': 50,
+    'ARJUN_CHUNK_SIZE': 500,
+    'ARJUN_RATE_LIMIT': 0,
+    'ARJUN_STABLE': False,
+    'ARJUN_PASSIVE': False,
+    'ARJUN_DISABLE_REDIRECTS': False,
+    'ARJUN_CUSTOM_HEADERS': [],
+
     # Kiterunner API Discovery
     'KITERUNNER_ENABLED': True,
     'KITERUNNER_WORDLISTS': ['routes-large'],
@@ -445,10 +459,12 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['USER_ID'] = project.get('userId', DEFAULT_SETTINGS['USER_ID'])
 
     # Target Configuration
-    settings['TARGET_DOMAIN'] = project.get('targetDomain', DEFAULT_SETTINGS['TARGET_DOMAIN'])
-    settings['SUBDOMAIN_LIST'] = project.get('subdomainList', DEFAULT_SETTINGS['SUBDOMAIN_LIST'])
+    settings['TARGET_DOMAIN'] = project.get('targetDomain', DEFAULT_SETTINGS['TARGET_DOMAIN']).strip()
+    raw_subs = project.get('subdomainList', DEFAULT_SETTINGS['SUBDOMAIN_LIST'])
+    settings['SUBDOMAIN_LIST'] = [s.strip() for s in raw_subs if s.strip()]
     settings['IP_MODE'] = project.get('ipMode', DEFAULT_SETTINGS['IP_MODE'])
-    settings['TARGET_IPS'] = project.get('targetIps', DEFAULT_SETTINGS['TARGET_IPS'])
+    raw_ips = project.get('targetIps', DEFAULT_SETTINGS['TARGET_IPS'])
+    settings['TARGET_IPS'] = [ip.strip() for ip in raw_ips if ip.strip()]
     settings['VERIFY_DOMAIN_OWNERSHIP'] = project.get('verifyDomainOwnership', DEFAULT_SETTINGS['VERIFY_DOMAIN_OWNERSHIP'])
     settings['OWNERSHIP_TOKEN'] = project.get('ownershipToken', DEFAULT_SETTINGS['OWNERSHIP_TOKEN'])
     settings['OWNERSHIP_TXT_PREFIX'] = project.get('ownershipTxtPrefix', DEFAULT_SETTINGS['OWNERSHIP_TXT_PREFIX'])
@@ -599,6 +615,20 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['FFUF_FOLLOW_REDIRECTS'] = project.get('ffufFollowRedirects', DEFAULT_SETTINGS['FFUF_FOLLOW_REDIRECTS'])
     settings['FFUF_CUSTOM_HEADERS'] = project.get('ffufCustomHeaders', DEFAULT_SETTINGS['FFUF_CUSTOM_HEADERS'])
     settings['FFUF_SMART_FUZZ'] = project.get('ffufSmartFuzz', DEFAULT_SETTINGS['FFUF_SMART_FUZZ'])
+
+    # Arjun Parameter Discovery
+    settings['ARJUN_ENABLED'] = project.get('arjunEnabled', DEFAULT_SETTINGS['ARJUN_ENABLED'])
+    settings['ARJUN_THREADS'] = project.get('arjunThreads', DEFAULT_SETTINGS['ARJUN_THREADS'])
+    settings['ARJUN_TIMEOUT'] = project.get('arjunTimeout', DEFAULT_SETTINGS['ARJUN_TIMEOUT'])
+    settings['ARJUN_SCAN_TIMEOUT'] = project.get('arjunScanTimeout', DEFAULT_SETTINGS['ARJUN_SCAN_TIMEOUT'])
+    settings['ARJUN_METHODS'] = project.get('arjunMethods', DEFAULT_SETTINGS['ARJUN_METHODS'])
+    settings['ARJUN_MAX_ENDPOINTS'] = project.get('arjunMaxEndpoints', DEFAULT_SETTINGS['ARJUN_MAX_ENDPOINTS'])
+    settings['ARJUN_CHUNK_SIZE'] = project.get('arjunChunkSize', DEFAULT_SETTINGS['ARJUN_CHUNK_SIZE'])
+    settings['ARJUN_RATE_LIMIT'] = project.get('arjunRateLimit', DEFAULT_SETTINGS['ARJUN_RATE_LIMIT'])
+    settings['ARJUN_STABLE'] = project.get('arjunStable', DEFAULT_SETTINGS['ARJUN_STABLE'])
+    settings['ARJUN_PASSIVE'] = project.get('arjunPassive', DEFAULT_SETTINGS['ARJUN_PASSIVE'])
+    settings['ARJUN_DISABLE_REDIRECTS'] = project.get('arjunDisableRedirects', DEFAULT_SETTINGS['ARJUN_DISABLE_REDIRECTS'])
+    settings['ARJUN_CUSTOM_HEADERS'] = project.get('arjunCustomHeaders', DEFAULT_SETTINGS['ARJUN_CUSTOM_HEADERS'])
 
     # GAU Passive URL Discovery
     settings['GAU_ENABLED'] = project.get('gauEnabled', DEFAULT_SETTINGS['GAU_ENABLED'])
@@ -785,15 +815,15 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
             'NAABU_RATE_LIMIT', 'HTTPX_RATE_LIMIT', 'NUCLEI_RATE_LIMIT',
             'KATANA_RATE_LIMIT', 'GAU_VERIFY_RATE_LIMIT', 'GAU_METHOD_DETECT_RATE_LIMIT',
             'KITERUNNER_RATE_LIMIT', 'KITERUNNER_METHOD_DETECT_RATE_LIMIT',
-            'FFUF_RATE',
+            'FFUF_RATE', 'ARJUN_RATE_LIMIT',
             'PUREDNS_RATE_LIMIT',
             'HAKRAWLER_THREADS',
         ]
         for key in RATE_LIMIT_KEYS:
             if key not in settings:
                 continue
-            # FFUF_RATE uses 0 to mean "unlimited" — must be capped under RoE
-            if settings[key] == 0 and key == 'FFUF_RATE':
+            # FFUF_RATE and ARJUN_RATE_LIMIT use 0 to mean "unlimited" — must be capped under RoE
+            if settings[key] == 0 and key in ('FFUF_RATE', 'ARJUN_RATE_LIMIT'):
                 logger.info(f"RoE: capping {key} from unlimited (0) to {roe_max_rps} rps")
                 settings[key] = roe_max_rps
             elif settings[key] > roe_max_rps:
@@ -932,6 +962,9 @@ def apply_stealth_overrides(settings: dict[str, Any]) -> dict[str, Any]:
 
     # --- Kiterunner: DISABLED (active brute-force API discovery) ---
     settings['KITERUNNER_ENABLED'] = False
+
+    # --- Arjun: force PASSIVE ONLY (no active probing in stealth) ---
+    settings['ARJUN_PASSIVE'] = True
 
     # --- Banner Grabbing: DISABLED (direct socket connections) ---
     settings['BANNER_GRAB_ENABLED'] = False

@@ -850,3 +850,16 @@
   border: 1px solid rgba(168, 85, 247, 0.30);
   white-space: nowrap;
 }
+
+.nodeInfoPillInput {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.30);
+  white-space: nowrap;
+}

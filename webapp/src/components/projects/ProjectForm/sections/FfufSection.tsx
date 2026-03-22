@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -125,7 +124,7 @@ export function FfufSection({ data, updateField, projectId, mode }: FfufSectionP
         <h2 className={styles.sectionTitle}>
           <FolderSearch size={16} />
           FFuf Directory Fuzzer
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.Ffuf} />
+          <NodeInfoTooltip section="Ffuf" />
           <span className={styles.badgeActive}>Active</span>
         </h2>
         <div className={styles.sectionHeaderRight}>

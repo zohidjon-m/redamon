@@ -88,6 +88,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     // Remove fields that shouldn't be updated directly
     const { userId, createdAt, updatedAt, user, ...updateData } = body
 
+    // Sanitize string inputs that are used as hostnames/IPs (trailing spaces break DNS)
+    if (typeof updateData.targetDomain === 'string') {
+      updateData.targetDomain = updateData.targetDomain.trim()
+    }
+    if (Array.isArray(updateData.subdomainList)) {
+      updateData.subdomainList = updateData.subdomainList.map((s: string) => s.trim()).filter(Boolean)
+    }
+    if (Array.isArray(updateData.targetIps)) {
+      updateData.targetIps = updateData.targetIps.map((s: string) => s.trim()).filter(Boolean)
+    }
+
     const project = await prisma.project.update({
       where: { id },
       data: updateData

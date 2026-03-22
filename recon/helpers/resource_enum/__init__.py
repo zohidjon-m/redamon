@@ -73,6 +73,13 @@ from .ffuf_helpers import (
     merge_ffuf_into_by_base_url,
 )
 
+# Arjun helpers
+from .arjun_helpers import (
+    arjun_binary_check,
+    run_arjun_discovery,
+    merge_arjun_into_by_base_url,
+)
+
 # Endpoint organization
 from .endpoint_helpers import (
     organize_endpoints,
@@ -116,6 +123,10 @@ __all__ = [
     "run_ffuf_discovery",
     "pull_ffuf_binary_check",
     "merge_ffuf_into_by_base_url",
+    # Arjun
+    "arjun_binary_check",
+    "run_arjun_discovery",
+    "merge_arjun_into_by_base_url",
     # Endpoint organization
     "organize_endpoints",
 ]

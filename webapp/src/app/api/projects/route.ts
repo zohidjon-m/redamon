@@ -219,12 +219,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Sanitize string inputs that are used as hostnames/IPs (trailing spaces break DNS)
+    if (typeof sanitizedParams.subdomainList === 'object' && Array.isArray(sanitizedParams.subdomainList)) {
+      sanitizedParams.subdomainList = (sanitizedParams.subdomainList as string[]).map(s => s.trim()).filter(Boolean)
+    }
+    if (typeof sanitizedParams.targetIps === 'object' && Array.isArray(sanitizedParams.targetIps)) {
+      sanitizedParams.targetIps = (sanitizedParams.targetIps as string[]).map(s => s.trim()).filter(Boolean)
+    }
+
     // Create project with required fields and valid optional params
     const project = await prisma.project.create({
       data: {
         userId,
-        name,
-        targetDomain: ipMode ? '' : (targetDomain || ''),
+        name: name.trim(),
+        targetDomain: ipMode ? '' : (targetDomain || '').trim(),
         ipMode: ipMode || false,
         ...sanitizedParams
       }

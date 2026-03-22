@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -24,7 +23,7 @@ export function HakrawlerSection({ data, updateField }: HakrawlerSectionProps) {
         <h2 className={styles.sectionTitle}>
           <Bug size={16} />
           Hakrawler Web Crawler
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.Hakrawler} />
+          <NodeInfoTooltip section="Hakrawler" />
           <span className={styles.badgeActive}>Active</span>
         </h2>
         <div className={styles.sectionHeaderRight}>

@@ -99,7 +99,7 @@ flowchart TB
         DNS --> Ports[🔌 Port Scan<br/>Naabu]
         Ports --> HTTP[🌍 HTTP Probe<br/>Httpx]
         HTTP --> Tech[🔧 Tech Detection<br/>Wappalyzer]
-        Tech --> Resources[🕸️ Resource Enum<br/>Katana, Hakrawler, GAU,<br/>Kiterunner, jsluice, FFuf]
+        Tech --> Resources[🕸️ Resource Enum<br/>Katana, Hakrawler, GAU,<br/>Kiterunner, jsluice, FFuf, Arjun]
         Resources --> Vulns[⚠️ Vuln Scan<br/>Nuclei]
     end
 

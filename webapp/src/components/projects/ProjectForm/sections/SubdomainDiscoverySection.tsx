@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 import { TimeEstimate } from '../TimeEstimate'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
@@ -25,7 +24,7 @@ export function SubdomainDiscoverySection({ data, updateField }: SubdomainDiscov
         <h2 className={styles.sectionTitle}>
           <Search size={16} />
           Subdomain Discovery
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.SubdomainDiscovery} />
+          <NodeInfoTooltip section="SubdomainDiscovery" />
         </h2>
         <ChevronDown
           size={16}

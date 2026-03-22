@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-
----
-
 ## [3.0.0] - 2026-03-15
 
 ### Added
+
+
+- **Arjun Parameter Discovery** — discovers hidden HTTP query and body parameters on endpoints by testing ~25,000 common parameter names. Runs in Phase 4 (Resource Enumeration) after FFuf, testing discovered endpoints from crawlers/fuzzers rather than just base URLs. Disabled by default; stealth mode forces passive-only; RoE caps rate. Full stack integration:
+  - **Backend**: `arjun_helpers.py` with multi-method parallel execution via `ThreadPoolExecutor` — each selected method (GET/POST/JSON/XML) runs as a separate Arjun subprocess simultaneously
+  - **Discovered endpoint feeding**: collects full endpoint URLs from Katana + Hakrawler + jsluice + FFuf results, prioritizes API and dynamic endpoints, caps to configurable max (default 50)
+  - **Settings**: 12 user-configurable `ARJUN_*` settings (methods, max endpoints, threads, timeout, chunk size, rate limit, stable mode, passive mode, disable redirects, custom headers)
+  - **Frontend**: `ArjunSection.tsx` with multi-select method checkboxes, max endpoints field, scan parameters, stable/passive/redirect toggles, custom headers textarea
+  - **Stealth mode**: forces `ARJUN_PASSIVE=True` (CommonCrawl/OTX/WaybackMachine only, no active requests to target)
+  - **Tests**: 29 unit tests covering merge logic, multi-method parallel execution, scope filtering, command building, settings consistency, stealth/RoE overrides
 
 - **FFuf Directory Fuzzer** — brute-force directory/endpoint discovery using wordlists, complementing crawlers (Katana, Hakrawler, GAU) by finding hidden content (admin panels, backup files, configs, undocumented APIs). Runs in Phase 4 (Resource Enumeration) after jsluice and before Kiterunner. Disabled by default; stealth mode disables it; RoE caps rate. Full stack integration:
   - **Backend**: `ffuf_helpers.py` with `run_ffuf_discovery()`, JSON output parsing, scope filtering, deduplication, and smart fuzzing under crawler-discovered base paths
@@ -148,7 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Subdomain Discovery** — passive sources (crt.sh, HackerTarget, Subfinder, Amass, Knockpy Recon) and active discovery (Knockpy Bruteforce, Amass Active/Brute), plus DNS settings (WHOIS/DNS retries)
   - **Shodan OSINT Enrichment** — moved from the Integrations tab into Discovery & OSINT, reflecting its role as a core discovery tool rather than an external integration. All four toggles (Host Lookup, Reverse DNS, Domain DNS, Passive CVEs) remain unchanged
   - **URLScan.io Enrichment** — new section with passive badge, max results config, and API key status
-  - **Node Info Tooltips** — each section header now has a waypoints icon that shows which graph node types the tool creates (via `NodeInfoTooltip` component and `nodeMapping.ts`)
+  - **Node Info Tooltips** — each section header now has a waypoints icon that shows which graph node types the tool **consumes** (input, blue pills) and **produces** (output, purple pills) via `NodeInfoTooltip` component, `SECTION_INPUT_MAP` and `SECTION_NODE_MAP` in `nodeMapping.ts`
   - Recon toggle switches moved to section headers for cleaner layout
 
 - **Agent Guardrail Toggle** — the scope guardrail (LLM-based target verification) can now be enabled or disabled per project:

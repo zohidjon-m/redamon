@@ -19,6 +19,7 @@ import { JsluiceSection } from './sections/JsluiceSection'
 import { FfufSection } from './sections/FfufSection'
 import { GauSection } from './sections/GauSection'
 import { KiterunnerSection } from './sections/KiterunnerSection'
+import { ArjunSection } from './sections/ArjunSection'
 import { CveLookupSection } from './sections/CveLookupSection'
 import { MitreSection } from './sections/MitreSection'
 import { SecurityChecksSection } from './sections/SecurityChecksSection'
@@ -424,6 +425,7 @@ export function ProjectForm({
             <FfufSection data={formData} updateField={updateField} projectId={projectId} mode={mode} />
             <GauSection data={formData} updateField={updateField} />
             <KiterunnerSection data={formData} updateField={updateField} />
+            <ArjunSection data={formData} updateField={updateField} />
           </>
         )}
 

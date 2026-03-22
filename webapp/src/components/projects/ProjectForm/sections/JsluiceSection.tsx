@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
 
@@ -24,7 +23,7 @@ export function JsluiceSection({ data, updateField }: JsluiceSectionProps) {
         <h2 className={styles.sectionTitle}>
           <Code size={16} />
           jsluice JS Analyzer
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.Jsluice} />
+          <NodeInfoTooltip section="Jsluice" />
           <span className={styles.badgePassive}>Passive</span>
         </h2>
         <div className={styles.sectionHeaderRight}>

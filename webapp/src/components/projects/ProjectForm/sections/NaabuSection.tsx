@@ -6,7 +6,6 @@ import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
 import { NodeInfoTooltip } from '../NodeInfoTooltip'
-import { SECTION_NODE_MAP } from '../nodeMapping'
 import { TimeEstimate } from '../TimeEstimate'
 
 type FormData = Omit<Project, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'user'>
@@ -25,7 +24,7 @@ export function NaabuSection({ data, updateField }: NaabuSectionProps) {
         <h2 className={styles.sectionTitle}>
           <Radio size={16} />
           Naabu Port Scanner
-          <NodeInfoTooltip nodes={SECTION_NODE_MAP.Naabu} />
+          <NodeInfoTooltip section="Naabu" />
           <span className={styles.badgeActive}>Active</span>
         </h2>
         <ChevronDown

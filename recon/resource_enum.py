@@ -70,6 +70,10 @@ from recon.helpers.resource_enum import (
     run_ffuf_discovery,
     pull_ffuf_binary_check,
     merge_ffuf_into_by_base_url,
+    # Arjun helpers
+    arjun_binary_check,
+    run_arjun_discovery,
+    merge_arjun_into_by_base_url,
     # Endpoint organization
     organize_endpoints,
 )
@@ -99,7 +103,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     """
     print("\n" + "=" * 70)
     print("[*][ResourceEnum] RedAmon - Resource Enumeration")
-    print("[*][ResourceEnum] (Katana + Hakrawler + GAU + jsluice + FFuf + Kiterunner)")
+    print("[*][ResourceEnum] (Katana + Hakrawler + GAU + jsluice + FFuf + Kiterunner + Arjun)")
     print("=" * 70)
 
     # Use passed settings or empty dict as fallback
@@ -155,6 +159,20 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     FFUF_FOLLOW_REDIRECTS = settings.get('FFUF_FOLLOW_REDIRECTS', False)
     FFUF_CUSTOM_HEADERS = settings.get('FFUF_CUSTOM_HEADERS', [])
     FFUF_SMART_FUZZ = settings.get('FFUF_SMART_FUZZ', True)
+
+    # Arjun settings
+    ARJUN_ENABLED = settings.get('ARJUN_ENABLED', False)
+    ARJUN_THREADS = settings.get('ARJUN_THREADS', 2)
+    ARJUN_TIMEOUT = settings.get('ARJUN_TIMEOUT', 15)
+    ARJUN_SCAN_TIMEOUT = settings.get('ARJUN_SCAN_TIMEOUT', 600)
+    ARJUN_METHODS = settings.get('ARJUN_METHODS', ['GET'])
+    ARJUN_MAX_ENDPOINTS = settings.get('ARJUN_MAX_ENDPOINTS', 50)
+    ARJUN_CHUNK_SIZE = settings.get('ARJUN_CHUNK_SIZE', 500)
+    ARJUN_RATE_LIMIT = settings.get('ARJUN_RATE_LIMIT', 0)
+    ARJUN_STABLE = settings.get('ARJUN_STABLE', False)
+    ARJUN_PASSIVE = settings.get('ARJUN_PASSIVE', False)
+    ARJUN_DISABLE_REDIRECTS = settings.get('ARJUN_DISABLE_REDIRECTS', False)
+    ARJUN_CUSTOM_HEADERS = settings.get('ARJUN_CUSTOM_HEADERS', [])
 
     # GAU settings - disable in IP mode (archives index by domain, not IP)
     ip_mode = recon_data.get("metadata", {}).get("ip_mode", False)
@@ -359,6 +377,19 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
         print(f"[*][Kiterunner] Detect methods: {KITERUNNER_DETECT_METHODS}")
         if KITERUNNER_DETECT_METHODS:
             print(f"[*][Kiterunner] Method detection mode: {KITERUNNER_METHOD_DETECTION_MODE}")
+    # Arjun settings
+    print(f"[*][Arjun] Enabled: {ARJUN_ENABLED}")
+    if ARJUN_ENABLED:
+        print(f"[*][Arjun] Methods: {', '.join(ARJUN_METHODS)} ({'parallel' if len(ARJUN_METHODS) > 1 else 'single'})")
+        print(f"[*][Arjun] Max endpoints: {ARJUN_MAX_ENDPOINTS}")
+        print(f"[*][Arjun] Threads: {ARJUN_THREADS}")
+        print(f"[*][Arjun] Timeout: {ARJUN_TIMEOUT}s per request, {ARJUN_SCAN_TIMEOUT}s scan")
+        print(f"[*][Arjun] Chunk size: {ARJUN_CHUNK_SIZE}")
+        print(f"[*][Arjun] Rate limit: {ARJUN_RATE_LIMIT} req/s" if ARJUN_RATE_LIMIT > 0 else "[*][Arjun] Rate limit: unlimited")
+        print(f"[*][Arjun] Passive only: {ARJUN_PASSIVE}")
+        print(f"[*][Arjun] Stable mode: {ARJUN_STABLE}")
+        if ARJUN_CUSTOM_HEADERS:
+            print(f"[*][Arjun] Custom headers: {len(ARJUN_CUSTOM_HEADERS)}")
     print("=" * 70)
 
     start_time = datetime.now()
@@ -373,6 +404,8 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     kr_results = []
     ffuf_results = []
     ffuf_meta = {}
+    arjun_results = []
+    arjun_meta = {}
     jsluice_result = {"urls": [], "secrets": [], "external_domains": []}
 
     # Run Katana, Hakrawler, and GAU in parallel first (if enabled)
@@ -614,6 +647,66 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
         else:
             print("[!][FFuf] ffuf binary not found in PATH, skipping")
 
+    # Arjun parameter discovery (runs after crawlers/FFuf, enriches endpoints with hidden params)
+    # Feeds DISCOVERED endpoint URLs (not just base URLs) for maximum coverage.
+    arjun_stats = {
+        "arjun_total": 0,
+        "arjun_new_endpoints": 0,
+        "arjun_existing_enriched": 0,
+        "arjun_params_discovered": 0,
+    }
+
+    if ARJUN_ENABLED:
+        if arjun_binary_check():
+            # Collect full endpoint URLs from discovered data (Katana + Hakrawler + jsluice + FFuf)
+            arjun_target_urls = []
+            for base_url, base_data in organized_data['by_base_url'].items():
+                for path in base_data.get('endpoints', {}).keys():
+                    full_url = base_url.rstrip('/') + path
+                    arjun_target_urls.append(full_url)
+
+            # Fall back to base target_urls if no endpoints discovered yet
+            if not arjun_target_urls:
+                arjun_target_urls = list(target_urls)
+
+            # Cap to max endpoints (most interesting first — API/dynamic endpoints)
+            if len(arjun_target_urls) > ARJUN_MAX_ENDPOINTS:
+                # Prioritize API and dynamic endpoints over static ones
+                api_urls = [u for u in arjun_target_urls if any(p in u.lower() for p in ['/api/', '/v1/', '/v2/', '/graphql', '/rest/'])]
+                dynamic_urls = [u for u in arjun_target_urls if u not in api_urls and any(u.lower().endswith(e) for e in ['.php', '.asp', '.aspx', '.jsp'])]
+                other_urls = [u for u in arjun_target_urls if u not in api_urls and u not in dynamic_urls]
+                arjun_target_urls = (api_urls + dynamic_urls + other_urls)[:ARJUN_MAX_ENDPOINTS]
+                print(f"[*][Arjun] Capped to {ARJUN_MAX_ENDPOINTS} endpoints (API: {len(api_urls)}, dynamic: {len(dynamic_urls)}, other: {len(other_urls)})")
+
+            arjun_results, arjun_meta = run_arjun_discovery(
+                arjun_target_urls,
+                ARJUN_METHODS,
+                ARJUN_THREADS,
+                ARJUN_TIMEOUT,
+                ARJUN_SCAN_TIMEOUT,
+                ARJUN_CHUNK_SIZE,
+                ARJUN_RATE_LIMIT,
+                ARJUN_STABLE,
+                ARJUN_PASSIVE,
+                ARJUN_DISABLE_REDIRECTS,
+                ARJUN_CUSTOM_HEADERS,
+                target_domains,
+                use_proxy,
+            )
+
+            if arjun_results:
+                print("\n[*][Arjun] Merging discovered parameters into results...")
+                organized_data['by_base_url'], arjun_stats = merge_arjun_into_by_base_url(
+                    arjun_results,
+                    organized_data['by_base_url'],
+                )
+                print(f"[+][Arjun] Total URLs with params: {arjun_stats['arjun_total']}")
+                print(f"[+][Arjun] New endpoints: {arjun_stats['arjun_new_endpoints']}")
+                print(f"[+][Arjun] Existing endpoints enriched: {arjun_stats['arjun_existing_enriched']}")
+                print(f"[+][Arjun] Parameters discovered: {arjun_stats['arjun_params_discovered']}")
+        else:
+            print("[!][Arjun] arjun binary not found in PATH, skipping")
+
     # Merge GAU results if available
     gau_stats = {
         "gau_total": 0,
@@ -830,6 +923,13 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             'kiterunner_method_detection_enabled': KITERUNNER_DETECT_METHODS if KITERUNNER_ENABLED else False,
             'kiterunner_method_detection_mode': KITERUNNER_METHOD_DETECTION_MODE if KITERUNNER_ENABLED else None,
             'kiterunner_stats': kr_stats,
+            # Arjun metadata
+            'arjun_enabled': ARJUN_ENABLED,
+            'arjun_methods': ARJUN_METHODS if ARJUN_ENABLED else [],
+            'arjun_max_endpoints': ARJUN_MAX_ENDPOINTS if ARJUN_ENABLED else None,
+            'arjun_passive': ARJUN_PASSIVE if ARJUN_ENABLED else None,
+            'arjun_params_discovered': arjun_stats['arjun_params_discovered'],
+            'arjun_stats': arjun_stats,
             # General
             'proxy_used': use_proxy,
             'target_urls_count': len(target_urls),
@@ -871,6 +971,11 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             'kiterunner_new_endpoints': kr_stats['kr_new'],
             'kiterunner_overlap': kr_stats['kr_overlap'],
             'kiterunner_with_multiple_methods': kr_stats.get('kr_with_multiple_methods', 0),
+            # Arjun breakdown
+            'from_arjun': arjun_stats['arjun_total'] if ARJUN_ENABLED else 0,
+            'arjun_new_endpoints': arjun_stats['arjun_new_endpoints'],
+            'arjun_existing_enriched': arjun_stats['arjun_existing_enriched'],
+            'arjun_params_discovered': arjun_stats['arjun_params_discovered'],
             'methods': {},
             'categories': {}
         },
@@ -881,6 +986,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             + hakrawler_meta.get("external_domains", [])
             + jsluice_result.get("external_domains", [])
             + ffuf_meta.get("external_domains", [])
+            + arjun_meta.get("external_domains", [])
         ),
     }
 
@@ -926,6 +1032,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     if KITERUNNER_ENABLED and kr_results:
         print(f"[+][Kiterunner] New endpoints: {kr_stats['kr_new']}")
         print(f"[+][Kiterunner] Overlap: {kr_stats['kr_overlap']}")
+    print(f"[+][Arjun] Parameter discovery: {arjun_stats['arjun_params_discovered']} params" if ARJUN_ENABLED else "[+][Arjun] Parameter discovery: disabled")
+    if ARJUN_ENABLED and arjun_stats['arjun_params_discovered'] > 0:
+        print(f"[+][Arjun] Enriched endpoints: {arjun_stats['arjun_existing_enriched']}")
+        print(f"[+][Arjun] New endpoints: {arjun_stats['arjun_new_endpoints']}")
     print(f"[+][ResourceEnum] Base URLs: {resource_enum_result['summary']['total_base_urls']}")
     print(f"[+][ResourceEnum] Endpoints: {resource_enum_result['summary']['total_endpoints']}")
     print(f"[+][ResourceEnum] Parameters: {resource_enum_result['summary']['total_parameters']}")
