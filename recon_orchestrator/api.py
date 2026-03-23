@@ -89,6 +89,11 @@ GVM_SCAN_PATH = _get_host_path(_host_mounts, "/app/gvm_scan", "GVM_SCAN_PATH")
 GVM_IMAGE = os.getenv("GVM_IMAGE", "redamon-vuln-scanner:latest")
 GITHUB_HUNT_PATH = _get_host_path(_host_mounts, "/app/github_secret_hunt", "GITHUB_HUNT_PATH")
 GITHUB_HUNT_IMAGE = os.getenv("GITHUB_HUNT_IMAGE", "redamon-github-hunter:latest")
+try:
+    CUSTOM_TEMPLATES_PATH = _get_host_path(_host_mounts, "/app/nuclei-templates", "CUSTOM_TEMPLATES_PATH")
+except RuntimeError:
+    CUSTOM_TEMPLATES_PATH = ""
+    logger.info("Custom nuclei templates not mounted — custom templates feature disabled")
 VERSION = "1.0.0"
 
 # Global container manager
@@ -304,6 +309,7 @@ async def start_recon(project_id: str, request: ReconStartRequest):
             user_id=request.user_id,
             webapp_api_url=request.webapp_api_url,
             recon_path=RECON_PATH,
+            custom_templates_path=CUSTOM_TEMPLATES_PATH,
         )
         return state
     except ValueError as e:

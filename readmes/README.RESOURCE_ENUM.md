@@ -30,9 +30,9 @@
 
 ## Overview
 
-The `resource_enum.py` module provides comprehensive endpoint discovery and classification for web applications. It combines **active crawling** (Katana + Hakrawler), **passive historical URL discovery** (GAU), **API bruteforcing** (Kiterunner), **JavaScript analysis** (jsluice), **directory fuzzing** (FFuf), and **hidden parameter discovery** (Arjun) to maximize endpoint coverage, extracts parameters, parses HTML forms, discovers embedded secrets, and organizes everything into a structured format ready for vulnerability scanning.
+The `resource_enum.py` module provides comprehensive endpoint discovery and classification for web applications. It combines **active crawling** (Katana + Hakrawler), **passive historical URL discovery** (GAU), **passive parameter mining** (ParamSpider), **API bruteforcing** (Kiterunner), **JavaScript analysis** (jsluice), **directory fuzzing** (FFuf), and **hidden parameter discovery** (Arjun) to maximize endpoint coverage, extracts parameters, parses HTML forms, discovers embedded secrets, and organizes everything into a structured format ready for vulnerability scanning.
 
-**Pipeline Position:** GROUP 5 in the parallelized pipeline (`GROUP 4: http_probe -> GROUP 5: resource_enum -> GROUP 6: vuln_scan`). Katana, Hakrawler, GAU, and Kiterunner run concurrently via internal `ThreadPoolExecutor`. jsluice runs sequentially after crawling to analyze discovered JavaScript files. FFuf runs after jsluice to brute-force directory paths using wordlists. Arjun runs after FFuf to discover hidden parameters on discovered endpoints, with multiple methods (GET/POST/JSON/XML) executing in parallel.
+**Pipeline Position:** GROUP 5 in the parallelized pipeline (`GROUP 4: http_probe -> GROUP 5: resource_enum -> GROUP 6: vuln_scan`). Katana, Hakrawler, GAU, ParamSpider, and Kiterunner run concurrently via internal `ThreadPoolExecutor`. jsluice runs sequentially after crawling to analyze discovered JavaScript files. FFuf runs after jsluice to brute-force directory paths using wordlists. Arjun runs after FFuf to discover hidden parameters on discovered endpoints, with multiple methods (GET/POST/JSON/XML) executing in parallel.
 
 ### Why Resource Enumeration?
 
@@ -85,8 +85,9 @@ The `resource_enum.py` module provides comprehensive endpoint discovery and clas
 | **Hakrawler Crawling** | DOM-aware web crawling via Docker (active) |
 | **jsluice JS Analysis** | Passive JavaScript analysis to extract URLs, endpoints, and secrets |
 | **FFuf Directory Fuzzing** | Brute-force directory/endpoint discovery using wordlists (built-in SecLists + custom uploads) |
+| **ParamSpider Parameter Mining** | Passive Wayback Machine CDX query for parameterized URLs — returns only URLs with query parameters, values replaced by placeholder (FUZZ) |
 | **Arjun Parameter Discovery** | Discovers hidden HTTP query/body parameters on discovered endpoints using ~25,000 parameter names. Multi-method parallel execution (GET/POST/JSON/XML) |
-| **Parallel Execution** | Katana, Hakrawler, GAU, and Kiterunner run simultaneously, then jsluice → FFuf → Arjun sequential (Arjun methods run in parallel internally) |
+| **Parallel Execution** | Katana, Hakrawler, GAU, ParamSpider, and Kiterunner run simultaneously, then jsluice → FFuf → Arjun sequential (Arjun methods run in parallel internally) |
 | **URL Verification** | Verifies GAU URLs are live before adding to results |
 | **Method Detection** | OPTIONS probe detects allowed HTTP methods (GET, POST, PUT, DELETE) |
 | **Dead Endpoint Filtering** | Filters out endpoints that don't respond (404, 500, timeout) |
@@ -96,7 +97,7 @@ The `resource_enum.py` module provides comprehensive endpoint discovery and clas
 | **Type Inference** | Infers parameter data types (integer, email, URL, etc.) |
 | **Endpoint Classification** | Categorizes endpoints (auth, api, admin, file_access, etc.) |
 | **Parameter Classification** | Identifies sensitive params (id, file, auth, redirect, command) |
-| **Source Tracking** | Each endpoint tracked with `sources` array: `["katana", "hakrawler", "gau", "kiterunner", "jsluice", "arjun"]` |
+| **Source Tracking** | Each endpoint tracked with `sources` array: `["katana", "hakrawler", "gau", "paramspider", "kiterunner", "jsluice", "arjun"]` |
 | **Docker Execution** | Runs via Docker for consistency |
 | **Tor Support** | Anonymous crawling via SOCKS proxy |
 | **Incremental Output** | Saves results as crawling progresses |

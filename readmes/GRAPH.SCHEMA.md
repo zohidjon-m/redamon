@@ -326,7 +326,7 @@ FOR (c:Certificate) REQUIRE (c.subject_cn, c.user_id, c.project_id) IS UNIQUE;
 ---
 
 ### 8. Endpoint
-Specific web application endpoints (paths) discovered through Katana crawling, Hakrawler crawling, jsluice JavaScript analysis, or vulnerability scanning.
+Specific web application endpoints (paths) discovered through Katana crawling, Hakrawler crawling, ParamSpider parameter mining, jsluice JavaScript analysis, or vulnerability scanning.
 These are linked to their parent BaseURL and contain discovered parameters.
 
 ```cypher
@@ -366,7 +366,7 @@ FOR (e:Endpoint) REQUIRE (e.path, e.method, e.baseurl, e.user_id, e.project_id) 
 
 ### 8. Parameter
 URL parameters that represent potential attack vectors. These are discovered through Katana crawling,
-Hakrawler crawling, jsluice JavaScript analysis, and marked as injectable when vulnerabilities are found through DAST scanning.
+Hakrawler crawling, ParamSpider passive parameter mining, jsluice JavaScript analysis, and marked as injectable when vulnerabilities are found through DAST scanning.
 
 ```cypher
 (:Parameter {
@@ -919,7 +919,11 @@ CREATE CONSTRAINT secret_unique IF NOT EXISTS FOR (s:Secret) REQUIRE (s.id) IS U
 (Port)-[:RUNS_SERVICE]->(Service)
 
 // Service serves URLs (web endpoints)
-(Service)-[:SERVES_URL]->(URL)
+(Service)-[:SERVES_URL]->(BaseURL)
+
+// Subdomain links directly to BaseURL (fallback when Service -[:SERVES_URL]-> is absent,
+// e.g. port 80 redirected to HTTPS so httpx didn't probe it, but crawlers discovered URLs under it)
+(Subdomain)-[:HAS_BASE_URL]->(BaseURL)
 ```
 
 ---
@@ -1138,6 +1142,10 @@ Note: Each vulnerability connects to exactly ONE EXISTING parent:
   - IP-based URL → IP node (keeps direct IP findings connected to graph)
   - Hostname URL → existing BaseURL (from http_probe)
   - Hostname URL (no BaseURL) → Subdomain/Domain (fallback)
+
+Note: Subdomain -[:HAS_BASE_URL]-> BaseURL is a fallback relationship created when
+resource_enum discovers URLs under a base URL that httpx didn't probe (e.g. port 80
+redirected to HTTPS). This prevents orphaned BaseURL clusters in the graph.
   - No isolated nodes are created!
 ```
 
@@ -1569,6 +1577,7 @@ FOR (s:Secret) ON (s.source);
 | `port_scan.by_host.<host>.port_details[].service` | RUNS_SERVICE | Port → Service |
 | `port_scan.ip_to_hostnames.<ip>[]` | RESOLVES_TO | Subdomain → IP |
 | `http_probe.by_url.<url>` | SERVES_URL | Service → BaseURL |
+| `resource_enum.by_base_url.<url>` (orphan fallback) | HAS_BASE_URL | Subdomain → BaseURL |
 | `http_probe.by_url.<url>.technologies[]` | USES_TECHNOLOGY | BaseURL → Technology |
 | `vuln_scan.discovered_urls.dast_urls_with_params[]` | HAS_ENDPOINT | BaseURL → Endpoint |
 | `vuln_scan.discovered_urls.dast_urls_with_params[]` | HAS_PARAMETER | Endpoint → Parameter |

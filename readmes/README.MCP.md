@@ -117,7 +117,7 @@ AI Agent (Claude/LangGraph)
 | Server | Approach | Tools | Rationale |
 |--------|----------|-------|-----------|
 | network_recon | Dynamic CLI | `execute_curl(args)`, `execute_naabu(args)` | Simple CLIs, LLM knows flags |
-| nuclei | Dynamic CLI | `execute_nuclei(args)` | Many templates/options |
+| nuclei | Dynamic CLI | `execute_nuclei(args)` | Many templates/options, custom templates auto-discovered at startup |
 | nmap | Dynamic CLI | `execute_nmap(args)` | Countless flags, LLM expertise |
 | metasploit | Structured | `metasploit_console(command)`, `msf_restart()` | Stateful, sessions, complex workflows |
 
@@ -193,14 +193,23 @@ execute_naabu("-host 10.0.0.5 -p 21,22,80,443,3306,8080 -json")
 
 | Tool | Description |
 |------|-------------|
-| `execute_nuclei(args)` | Run nuclei with any CLI arguments (600s timeout) |
+| `execute_nuclei(args)` | Run nuclei with any CLI arguments (600s timeout). Custom templates at `/opt/nuclei-templates/` are auto-discovered and listed in the tool description at startup. |
 
 **Examples:**
 ```python
 execute_nuclei("-u http://10.0.0.5 -severity critical,high -jsonl")
 execute_nuclei("-u http://10.0.0.5 -id CVE-2021-41773 -jsonl")
 execute_nuclei("-u http://10.0.0.5 -tags xss,sqli -jsonl")
+
+# Custom templates (paths listed in tool description)
+execute_nuclei("-u http://10.0.0.5 -t /opt/nuclei-templates/http/misconfiguration/springboot/ -jsonl")
 ```
+
+**Custom Templates:**
+
+The `mcp/nuclei-templates/` directory is mounted read-only at `/opt/nuclei-templates/` inside the kali-sandbox container. At startup, the nuclei server scans this directory and dynamically appends all available template paths (with id, severity, name) to the `execute_nuclei` tool description, so the agent automatically knows what custom templates are available.
+
+Templates can be uploaded, viewed, and deleted from the webapp UI (Project Settings → Nuclei → Template Options) via the `/api/nuclei-templates` REST API. Uploaded templates are global (shared across all projects) and immediately visible to the agent after a kali-sandbox restart.
 
 ### Nmap Server (Port 8004)
 

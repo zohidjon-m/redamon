@@ -330,7 +330,27 @@ All parameters are configured via the webapp project settings (stored in Postgre
 |-----------|------|---------|-------------|
 | `NUCLEI_TEMPLATES` | `list` | `[]` | Specific template folders (empty = all) |
 | `NUCLEI_EXCLUDE_TEMPLATES` | `list` | `["fuzzing"]` | Templates to exclude |
-| `NUCLEI_CUSTOM_TEMPLATES` | `list` | `[]` | Paths to custom templates |
+| `NUCLEI_CUSTOM_TEMPLATES` | `list` | `[]` | Paths to custom templates (manual entry) |
+| `NUCLEI_SELECTED_CUSTOM_TEMPLATES` | `list` | `[]` | Per-project selected custom templates from the upload UI |
+
+**Custom Templates:**
+
+Custom nuclei templates (`mcp/nuclei-templates/`) can be uploaded, viewed, and deleted directly from Project Settings → Nuclei → Template Options. Each template has a **per-project checkbox** — only checked templates are included in that project's scans. Templates are global (shared across all projects), but selection is per-project.
+
+**Management:**
+- **Upload** `.yaml`/`.yml` templates — validated for nuclei format (`id:`, `info.name:`, `info.severity:`)
+- **Select** templates per project via checkboxes — only selected templates run during scans
+- **View** all uploaded templates with severity badges and metadata
+- **Delete** individual templates
+- API: `GET/POST/DELETE /api/nuclei-templates`
+
+**How it works:**
+- Selected templates are individually passed as `-t /custom-templates/{path}` flags to nuclei
+- Recon logs list each selected template by name at scan start
+- The AI agent also sees all templates automatically — at startup, the nuclei MCP server dynamically appends template paths to the `execute_nuclei` tool description
+
+Currently available custom template sets:
+- **Spring Boot Actuator** — 7 templates with 200+ bypass paths for `/actuator`, `/heapdump`, `/env`, `/jolokia`, `/gateway` endpoints including URL encoding, semicolon injection, and alternate base path evasion
 
 **Template Folders:**
 ```

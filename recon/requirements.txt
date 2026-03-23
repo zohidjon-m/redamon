@@ -29,6 +29,7 @@ neo4j>=5.0.0                 # Neo4j graph database driver
 
 # HTTP parameter discovery
 arjun>=2.2.7                 # Hidden parameter discovery
+paramspider @ git+https://github.com/devanshbatham/ParamSpider.git  # Passive URL parameter mining from Wayback Machine
 
 # MITRE enrichment
 # (uses requests - already included above)

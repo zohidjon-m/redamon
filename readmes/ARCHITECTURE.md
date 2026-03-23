@@ -99,7 +99,7 @@ flowchart TB
         DNS --> Ports[🔌 Port Scan<br/>Naabu]
         Ports --> HTTP[🌍 HTTP Probe<br/>Httpx]
         HTTP --> Tech[🔧 Tech Detection<br/>Wappalyzer]
-        Tech --> Resources[🕸️ Resource Enum<br/>Katana, Hakrawler, GAU,<br/>Kiterunner, jsluice, FFuf, Arjun]
+        Tech --> Resources[🕸️ Resource Enum<br/>Katana, Hakrawler, GAU, ParamSpider,<br/>Kiterunner, jsluice, FFuf, Arjun]
         Resources --> Vulns[⚠️ Vuln Scan<br/>Nuclei]
     end
 
@@ -288,6 +288,7 @@ flowchart TB
         subgraph Module4["4️⃣ resource_enum"]
             Katana[Katana<br/>Web Crawler]
             Hakrawler[Hakrawler<br/>DOM-aware Crawler]
+            ParamSpider[ParamSpider<br/>Passive Param Mining]
             Forms[Form Parser<br/>Input Discovery]
             Endpoints[Endpoint<br/>Classification]
             Jsluice[jsluice<br/>JS URL + Secret Extraction]

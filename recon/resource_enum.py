@@ -15,11 +15,12 @@ Features:
 - Parameter extraction and classification
 - Endpoint categorization (auth, file_access, api, dynamic, static, admin)
 - Parameter type detection (id, file, search, auth params)
-- Parallel execution of Katana + Hakrawler + GAU with merged results
+- ParamSpider passive parameter URL discovery from Wayback Machine (passive)
+- Parallel execution of Katana + Hakrawler + GAU + ParamSpider with merged results
 - jsluice post-crawl analysis on discovered JS files
 - FFuf post-crawl directory fuzzing with smart base path targeting
 
-Pipeline: http_probe -> resource_enum (Katana + Hakrawler + GAU parallel, then jsluice, then FFuf) -> vuln_scan
+Pipeline: http_probe -> resource_enum (Katana + Hakrawler + GAU + ParamSpider parallel, then jsluice, then FFuf) -> vuln_scan
 """
 
 import json
@@ -74,6 +75,9 @@ from recon.helpers.resource_enum import (
     arjun_binary_check,
     run_arjun_discovery,
     merge_arjun_into_by_base_url,
+    # ParamSpider helpers
+    run_paramspider_discovery,
+    merge_paramspider_into_by_base_url,
     # Endpoint organization
     organize_endpoints,
 )
@@ -203,6 +207,11 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     GAU_METHOD_DETECT_RATE_LIMIT = settings.get('GAU_METHOD_DETECT_RATE_LIMIT', 30)
     GAU_FILTER_DEAD_ENDPOINTS = settings.get('GAU_FILTER_DEAD_ENDPOINTS', True)
     URLSCAN_API_KEY = settings.get('URLSCAN_API_KEY', '')
+
+    # ParamSpider settings - disable in IP mode (archives index by domain, not IP)
+    PARAMSPIDER_ENABLED = False if ip_mode else settings.get('PARAMSPIDER_ENABLED', False)
+    PARAMSPIDER_PLACEHOLDER = settings.get('PARAMSPIDER_PLACEHOLDER', 'FUZZ')
+    PARAMSPIDER_TIMEOUT = settings.get('PARAMSPIDER_TIMEOUT', 120)
 
     # Kiterunner settings
     KITERUNNER_ENABLED = settings.get('KITERUNNER_ENABLED', False)
@@ -365,6 +374,11 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             print(f"[*][GAU] Verify timeout: {GAU_VERIFY_TIMEOUT}s")
         print(f"[*][GAU] Detect methods: {GAU_DETECT_METHODS}")
         print(f"[*][GAU] Filter dead endpoints: {GAU_FILTER_DEAD_ENDPOINTS}")
+    # ParamSpider settings
+    print(f"[*][ParamSpider] Enabled: {PARAMSPIDER_ENABLED}")
+    if PARAMSPIDER_ENABLED:
+        print(f"[*][ParamSpider] Placeholder: {PARAMSPIDER_PLACEHOLDER}")
+        print(f"[*][ParamSpider] Timeout: {PARAMSPIDER_TIMEOUT}s")
     # Kiterunner settings
     print(f"[*][Kiterunner] Enabled: {KITERUNNER_ENABLED}")
     if KITERUNNER_ENABLED:
@@ -401,6 +415,8 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     hakrawler_meta = {}
     gau_urls = []
     gau_urls_by_domain = {}
+    paramspider_urls = []
+    paramspider_urls_by_domain = {}
     kr_results = []
     ffuf_results = []
     ffuf_meta = {}
@@ -408,8 +424,8 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     arjun_meta = {}
     jsluice_result = {"urls": [], "secrets": [], "external_domains": []}
 
-    # Run Katana, Hakrawler, and GAU in parallel first (if enabled)
-    if KATANA_ENABLED or HAKRAWLER_ENABLED or GAU_ENABLED:
+    # Run Katana, Hakrawler, GAU, and ParamSpider in parallel first (if enabled)
+    if KATANA_ENABLED or HAKRAWLER_ENABLED or GAU_ENABLED or PARAMSPIDER_ENABLED:
         tools_running = []
         if KATANA_ENABLED:
             tools_running.append("Katana")
@@ -417,11 +433,13 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             tools_running.append("Hakrawler")
         if GAU_ENABLED:
             tools_running.append("GAU")
+        if PARAMSPIDER_ENABLED:
+            tools_running.append("ParamSpider")
         print(f"\n[*][ResourceEnum] Running URL discovery ({' + '.join(tools_running)})...")
     elif not KITERUNNER_ENABLED:
-        print("\n[-][ResourceEnum] All URL discovery tools disabled (Katana, Hakrawler, GAU, Kiterunner)")
+        print("\n[-][ResourceEnum] All URL discovery tools disabled (Katana, Hakrawler, GAU, ParamSpider, Kiterunner)")
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {}
 
         # Submit Katana crawler if enabled
@@ -477,7 +495,17 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
                 URLSCAN_API_KEY
             )
 
-        # Collect Katana and GAU results
+        # Submit ParamSpider discovery if enabled
+        if PARAMSPIDER_ENABLED and target_domains:
+            futures['paramspider'] = executor.submit(
+                run_paramspider_discovery,
+                target_domains,
+                PARAMSPIDER_PLACEHOLDER,
+                PARAMSPIDER_TIMEOUT,
+                use_proxy,
+            )
+
+        # Collect results from all parallel tools
         for name, future in futures.items():
             try:
                 if name == 'katana':
@@ -489,6 +517,9 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
                 elif name == 'gau':
                     gau_urls, gau_urls_by_domain = future.result(timeout=GAU_TIMEOUT * len(GAU_PROVIDERS) + 180)
                     print(f"[+][GAU] Completed: {len(gau_urls)} URLs")
+                elif name == 'paramspider':
+                    paramspider_urls, paramspider_urls_by_domain = future.result(timeout=PARAMSPIDER_TIMEOUT * len(target_domains) + 120)
+                    print(f"[+][ParamSpider] Completed: {len(paramspider_urls)} parameterized URLs")
             except Exception as e:
                 print(f"[!][ResourceEnum] {name} failed: {e}")
 
@@ -794,6 +825,30 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
         if GAU_FILTER_DEAD_ENDPOINTS:
             print(f"[+][GAU] Dead endpoints filtered: {gau_stats.get('gau_skipped_dead', 0)}")
 
+    # Merge ParamSpider results if available
+    paramspider_stats = {
+        "paramspider_total": 0,
+        "paramspider_parsed": 0,
+        "paramspider_new": 0,
+        "paramspider_overlap": 0,
+        "paramspider_out_of_scope": 0,
+    }
+
+    if PARAMSPIDER_ENABLED and paramspider_urls:
+        print("\n[*][ParamSpider] Merging parameterized endpoints into results...")
+        organized_data['by_base_url'], paramspider_stats = merge_paramspider_into_by_base_url(
+            paramspider_urls,
+            organized_data['by_base_url'],
+            target_domains,
+        )
+
+        print(f"[+][ParamSpider] Total URLs: {paramspider_stats['paramspider_total']}")
+        if paramspider_stats['paramspider_out_of_scope'] > 0:
+            print(f"[+][ParamSpider] Out-of-scope (filtered): {paramspider_stats['paramspider_out_of_scope']}")
+        print(f"[+][ParamSpider] Parsed: {paramspider_stats['paramspider_parsed']}")
+        print(f"[+][ParamSpider] New endpoints: {paramspider_stats['paramspider_new']}")
+        print(f"[+][ParamSpider] Overlap with other tools: {paramspider_stats['paramspider_overlap']}")
+
     # Merge Kiterunner results if available
     kr_stats = {
         "kr_total": 0,
@@ -866,7 +921,7 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     jsluice_in_scope_urls = jsluice_result.get("urls", []) if JSLUICE_ENABLED else []
     ffuf_discovered_urls = [r["url"] for r in ffuf_results] if FFUF_ENABLED else []
     all_discovered_urls = sorted(set(
-        katana_urls + hakrawler_urls + in_scope_gau + urlscan_urls + jsluice_in_scope_urls + ffuf_discovered_urls
+        katana_urls + hakrawler_urls + in_scope_gau + paramspider_urls + urlscan_urls + jsluice_in_scope_urls + ffuf_discovered_urls
     ))
 
     # Build result structure
@@ -914,6 +969,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             'gau_method_detection_enabled': GAU_DETECT_METHODS if GAU_ENABLED else False,
             'gau_filter_dead_endpoints': GAU_FILTER_DEAD_ENDPOINTS if GAU_ENABLED else False,
             'gau_stats': gau_stats,
+            # ParamSpider metadata
+            'paramspider_enabled': PARAMSPIDER_ENABLED,
+            'paramspider_urls_found_total': len(paramspider_urls),
+            'paramspider_stats': paramspider_stats,
             # Kiterunner metadata
             'kiterunner_enabled': KITERUNNER_ENABLED,
             'kiterunner_binary_path': kr_binary_path if KITERUNNER_ENABLED else None,
@@ -966,6 +1025,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
             'from_gau_in_scope': len(in_scope_gau),  # Only in-scope URLs
             'gau_new_endpoints': gau_stats['gau_new'],
             'gau_overlap': gau_stats['gau_overlap'],
+            # ParamSpider breakdown
+            'from_paramspider_total': len(paramspider_urls),
+            'paramspider_new_endpoints': paramspider_stats['paramspider_new'],
+            'paramspider_overlap': paramspider_stats['paramspider_overlap'],
             # Kiterunner breakdown
             'from_kiterunner': len(kr_results) if KITERUNNER_ENABLED else 0,
             'kiterunner_new_endpoints': kr_stats['kr_new'],
@@ -1028,6 +1091,10 @@ def run_resource_enum(recon_data: dict, output_file: Optional[Path] = None, sett
     if GAU_ENABLED and gau_urls:
         print(f"[+][GAU] New endpoints: {gau_stats['gau_new']}")
         print(f"[+][GAU] Overlap: {gau_stats['gau_overlap']}")
+    print(f"[+][ParamSpider] Passive params: {len(paramspider_urls) if PARAMSPIDER_ENABLED else 'disabled'}")
+    if PARAMSPIDER_ENABLED and paramspider_urls:
+        print(f"[+][ParamSpider] New endpoints: {paramspider_stats['paramspider_new']}")
+        print(f"[+][ParamSpider] Overlap: {paramspider_stats['paramspider_overlap']}")
     print(f"[+][Kiterunner] API bruteforce: {len(kr_results) if KITERUNNER_ENABLED else 'disabled'}")
     if KITERUNNER_ENABLED and kr_results:
         print(f"[+][Kiterunner] New endpoints: {kr_stats['kr_new']}")

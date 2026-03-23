@@ -23,6 +23,7 @@ webapp/
 │   │   ├── api/               # API Routes
 │   │   │   ├── health/        # Health check endpoint
 │   │   │   ├── neo4j/         # Neo4j query endpoint
+│   │   │   ├── nuclei-templates/ # Custom nuclei template CRUD (global)
 │   │   │   ├── projects/      # Project CRUD endpoints
 │   │   │   └── recon/         # Recon control endpoints
 │   │   │       └── [projectId]/

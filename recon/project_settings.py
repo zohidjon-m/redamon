@@ -124,6 +124,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'NUCLEI_TEMPLATES': [],
     'NUCLEI_EXCLUDE_TEMPLATES': [],
     'NUCLEI_CUSTOM_TEMPLATES': [],
+    'NUCLEI_SELECTED_CUSTOM_TEMPLATES': [],
     'NUCLEI_RATE_LIMIT': 100,
     'NUCLEI_BULK_SIZE': 25,
     'NUCLEI_CONCURRENCY': 25,
@@ -224,6 +225,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     'GAU_METHOD_DETECT_RATE_LIMIT': 50,
     'GAU_METHOD_DETECT_THREADS': 25,
     'GAU_FILTER_DEAD_ENDPOINTS': True,
+
+    # ParamSpider Passive Parameter Discovery
+    'PARAMSPIDER_ENABLED': False,
+    'PARAMSPIDER_PLACEHOLDER': 'FUZZ',
+    'PARAMSPIDER_TIMEOUT': 120,
 
     # Hakrawler Web Crawler
     'HAKRAWLER_ENABLED': True,
@@ -549,6 +555,7 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['NUCLEI_TEMPLATES'] = project.get('nucleiTemplates', DEFAULT_SETTINGS['NUCLEI_TEMPLATES'])
     settings['NUCLEI_EXCLUDE_TEMPLATES'] = project.get('nucleiExcludeTemplates', DEFAULT_SETTINGS['NUCLEI_EXCLUDE_TEMPLATES'])
     settings['NUCLEI_CUSTOM_TEMPLATES'] = project.get('nucleiCustomTemplates', DEFAULT_SETTINGS['NUCLEI_CUSTOM_TEMPLATES'])
+    settings['NUCLEI_SELECTED_CUSTOM_TEMPLATES'] = project.get('nucleiSelectedCustomTemplates', DEFAULT_SETTINGS['NUCLEI_SELECTED_CUSTOM_TEMPLATES'])
     settings['NUCLEI_RATE_LIMIT'] = project.get('nucleiRateLimit', DEFAULT_SETTINGS['NUCLEI_RATE_LIMIT'])
     settings['NUCLEI_BULK_SIZE'] = project.get('nucleiBulkSize', DEFAULT_SETTINGS['NUCLEI_BULK_SIZE'])
     settings['NUCLEI_CONCURRENCY'] = project.get('nucleiConcurrency', DEFAULT_SETTINGS['NUCLEI_CONCURRENCY'])
@@ -651,6 +658,11 @@ def fetch_project_settings(project_id: str, webapp_url: str) -> dict[str, Any]:
     settings['GAU_METHOD_DETECT_RATE_LIMIT'] = project.get('gauMethodDetectRateLimit', DEFAULT_SETTINGS['GAU_METHOD_DETECT_RATE_LIMIT'])
     settings['GAU_METHOD_DETECT_THREADS'] = project.get('gauMethodDetectThreads', DEFAULT_SETTINGS['GAU_METHOD_DETECT_THREADS'])
     settings['GAU_FILTER_DEAD_ENDPOINTS'] = project.get('gauFilterDeadEndpoints', DEFAULT_SETTINGS['GAU_FILTER_DEAD_ENDPOINTS'])
+
+    # ParamSpider Passive Parameter Discovery
+    settings['PARAMSPIDER_ENABLED'] = project.get('paramspiderEnabled', DEFAULT_SETTINGS['PARAMSPIDER_ENABLED'])
+    settings['PARAMSPIDER_PLACEHOLDER'] = project.get('paramspiderPlaceholder', DEFAULT_SETTINGS['PARAMSPIDER_PLACEHOLDER'])
+    settings['PARAMSPIDER_TIMEOUT'] = project.get('paramspiderTimeout', DEFAULT_SETTINGS['PARAMSPIDER_TIMEOUT'])
 
     # Kiterunner API Discovery
     settings['KITERUNNER_ENABLED'] = project.get('kiterunnerEnabled', DEFAULT_SETTINGS['KITERUNNER_ENABLED'])
@@ -938,6 +950,9 @@ def apply_stealth_overrides(settings: dict[str, Any]) -> dict[str, Any]:
     settings['GAU_VERIFY_THREADS'] = 1
     settings['GAU_METHOD_DETECT_RATE_LIMIT'] = 2
     settings['GAU_METHOD_DETECT_THREADS'] = 1
+
+    # --- ParamSpider: enable it (passive source) ---
+    settings['PARAMSPIDER_ENABLED'] = True
 
     # --- Nuclei: passive-only scanning ---
     settings['NUCLEI_DAST_MODE'] = False       # No active fuzzing

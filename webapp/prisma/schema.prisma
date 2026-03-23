@@ -202,8 +202,9 @@ model Project {
   nucleiSeverity              String[] @default(["critical", "high", "medium", "low"]) @map("nuclei_severity")
   nucleiTemplates             String[] @default([]) @map("nuclei_templates")
   nucleiExcludeTemplates      String[] @default([]) @map("nuclei_exclude_templates")
-  nucleiCustomTemplates       String[] @default([]) @map("nuclei_custom_templates")
-  nucleiRateLimit             Int      @default(100) @map("nuclei_rate_limit")
+  nucleiCustomTemplates          String[] @default([]) @map("nuclei_custom_templates")
+  nucleiSelectedCustomTemplates  String[] @default([]) @map("nuclei_selected_custom_templates")
+  nucleiRateLimit                Int      @default(100) @map("nuclei_rate_limit")
   nucleiBulkSize              Int      @default(25) @map("nuclei_bulk_size")
   nucleiConcurrency           Int      @default(25) @map("nuclei_concurrency")
   nucleiTimeout               Int      @default(10) @map("nuclei_timeout")
@@ -306,6 +307,11 @@ model Project {
   gauMethodDetectRateLimit    Int      @default(50) @map("gau_method_detect_rate_limit")
   gauMethodDetectThreads      Int      @default(25) @map("gau_method_detect_threads")
   gauFilterDeadEndpoints      Boolean  @default(true) @map("gau_filter_dead_endpoints")
+
+  // ========== PARAMSPIDER PASSIVE PARAMETER DISCOVERY ==========
+  paramspiderEnabled          Boolean  @default(false) @map("paramspider_enabled")
+  paramspiderPlaceholder      String   @default("FUZZ") @map("paramspider_placeholder")
+  paramspiderTimeout          Int      @default(120) @map("paramspider_timeout")
 
   // ========== KITERUNNER API DISCOVERY ==========
   kiterunnerEnabled           Boolean  @default(false) @map("kiterunner_enabled")

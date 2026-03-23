@@ -61,10 +61,11 @@
 | **Metasploit Framework** | Exploitation | Exploit execution, payload delivery, Meterpreter sessions, auxiliary scanners, and post-exploitation |
 | **Naabu** | Port Scanning | Fast SYN/CONNECT port scanner from ProjectDiscovery |
 | **Nmap** | Network Scanning | Network mapper for deep service detection, OS fingerprinting, and NSE vulnerability scripts — exposed as a dedicated MCP server |
-| **Nuclei** | Vulnerability Scanning | Template-based scanner with 9,000+ community templates — DAST fuzzing, CVE detection, misconfiguration checks |
+| **Nuclei** | Vulnerability Scanning | Template-based scanner with 9,000+ community templates + custom template upload — DAST fuzzing, CVE detection, misconfiguration checks |
 | **Httpx** | HTTP Probing | HTTP/HTTPS probing, technology detection, TLS inspection, and response metadata extraction |
 | **Katana** | Web Crawling | Active web crawler with JavaScript rendering — discovers URLs, endpoints, forms, and parameters |
 | **GAU** (GetAllUrls) | Passive Recon | Passive URL discovery from Wayback Machine, Common Crawl, AlienVault OTX, and URLScan.io |
+| **ParamSpider** | Parameter Mining | Passive URL parameter discovery from Wayback Machine CDX API — returns only parameterized URLs for fuzzing |
 | **Kiterunner** | API Discovery | API endpoint brute-forcer using real-world Swagger/OpenAPI-derived wordlists |
 | **Subfinder** | Subdomain Discovery | Passive subdomain enumeration using 50+ online sources (certificate logs, DNS databases, web archives) |
 | **Knockpy** | Subdomain Discovery | Active subdomain brute-forcing tool |

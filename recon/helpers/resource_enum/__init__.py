@@ -80,6 +80,12 @@ from .arjun_helpers import (
     merge_arjun_into_by_base_url,
 )
 
+# ParamSpider helpers
+from .paramspider_helpers import (
+    run_paramspider_discovery,
+    merge_paramspider_into_by_base_url,
+)
+
 # Endpoint organization
 from .endpoint_helpers import (
     organize_endpoints,
@@ -127,6 +133,9 @@ __all__ = [
     "arjun_binary_check",
     "run_arjun_discovery",
     "merge_arjun_into_by_base_url",
+    # ParamSpider
+    "run_paramspider_discovery",
+    "merge_paramspider_into_by_base_url",
     # Endpoint organization
     "organize_endpoints",
 ]

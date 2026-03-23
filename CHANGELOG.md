@@ -11,6 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Custom Nuclei Templates Integration** — custom nuclei templates (`mcp/nuclei-templates/`) are now manageable via the UI with per-project selection, dynamically discovered by the agent, and included in automated recon scans:
+  - **Template Upload UI**: upload, view, and delete custom `.yaml`/`.yml` nuclei templates directly from Project Settings → Nuclei → Template Options. Templates are global (shared across all projects). Upload validates nuclei template format (requires `id:` and `info:` with `name:` and `severity:`). API: `GET/POST/DELETE /api/nuclei-templates`
+  - **Per-project template selection**: each template has a checkbox — only checked templates are included in that project's automated scans. Stored as `nucleiSelectedCustomTemplates` String[] per project (default: `[]`). Different projects can enable different templates from the same global pool
+  - **Agent discovery**: at startup, the nuclei MCP server scans `/opt/nuclei-templates/` and dynamically appends all template paths (id, severity, name) to the `execute_nuclei` tool description, so the agent automatically knows what custom templates are available
+  - **Recon pipeline**: selected templates are individually passed as `-t /custom-templates/{path}` flags to nuclei. Recon logs list each selected template by name
+  - **Spring Boot Actuator templates** (community PR #69): 7 detection templates with 200+ WAF bypass paths for `/actuator`, `/heapdump`, `/env`, `/jolokia`, `/gateway` endpoints — URL encoding, semicolon injection, path traversal, and alternate base path evasion techniques
+
+- **SSL Verify Toggle for OpenAI-compatible LLM Providers** (community PR #70) — `sslVerify` boolean (default: `true`) lets users skip SSL certificate verification when connecting to internal/self-hosted LLM endpoints with self-signed certificates. Full stack: Prisma schema, API route, frontend checkbox, agent `httpx.Client(verify=False)` injection.
+
+- **Dockerfile `DEBIAN_FRONTEND=noninteractive`** (community PR #63) — added to `agentic`, `recon_orchestrator`, and `guinea_pigs` Dockerfiles to suppress interactive `apt-get` prompts during builds.
+
+- **ParamSpider Passive Parameter Discovery** — mines the Wayback Machine CDX API for historically-documented URLs containing query parameters. Only returns parameterized URLs (with `?key=value`), with values replaced by a configurable placeholder (default `FUZZ`), making results directly usable for fuzzing. Runs in Phase 4 (Resource Enumeration) in parallel with Katana, Hakrawler, and GAU. Passive — no traffic to target. No API keys required. Disabled by default; stealth mode auto-enables it. Full stack integration:
+  - **Backend**: `paramspider_helpers.py` with `run_paramspider_discovery()` (subprocess per domain, stdout + file output parsing, scope filtering, temp dir cleanup) and `merge_paramspider_into_by_base_url()` (sources array merge, parameter enrichment, deduplication)
+  - **Settings**: 3 user-configurable `PARAMSPIDER_*` settings (enabled, placeholder, timeout)
+  - **Frontend**: `ParamSpiderSection.tsx` with enable toggle, placeholder input, timeout setting
+  - **Stealth mode**: auto-enabled (passive tool, queries Wayback Machine only)
+  - **Tests**: 22 unit tests covering merge logic, subprocess mocking, scope filtering, method merging, legacy field migration, settings, stealth overrides
 
 - **Arjun Parameter Discovery** — discovers hidden HTTP query and body parameters on endpoints by testing ~25,000 common parameter names. Runs in Phase 4 (Resource Enumeration) after FFuf, testing discovered endpoints from crawlers/fuzzers rather than just base URLs. Disabled by default; stealth mode forces passive-only; RoE caps rate. Full stack integration:
   - **Backend**: `arjun_helpers.py` with multi-method parallel execution via `ThreadPoolExecutor` — each selected method (GET/POST/JSON/XML) runs as a separate Arjun subprocess simultaneously

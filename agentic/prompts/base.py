@@ -1143,8 +1143,8 @@ GVM-specific properties (source="gvm"):
 - `(i:IP)-[:HAS_CERTIFICATE]->(c:Certificate)` - IP has TLS certificate (GVM-discovered)
 
 ### Web Application Relationships
-- `(b:BaseURL)-[:BELONGS_TO]->(s:Subdomain)` - BaseURL belongs to Subdomain
-- `(svc:Service)-[:SERVES_URL]->(b:BaseURL)` - Service serves BaseURL (HTTP)
+- `(svc:Service)-[:SERVES_URL]->(b:BaseURL)` - Service serves BaseURL (from httpx probe)
+- `(s:Subdomain)-[:HAS_BASE_URL]->(b:BaseURL)` - Subdomain has BaseURL (fallback when no Service link, e.g. port 80 redirected)
 - `(b:BaseURL)-[:HAS_ENDPOINT]->(e:Endpoint)` - BaseURL has Endpoint
 - `(e:Endpoint)-[:HAS_PARAMETER]->(param:Parameter)` - Endpoint has Parameter
 
@@ -1233,9 +1233,9 @@ WHERE v.severity = "critical"
 RETURN v.name, v.source, v.cvss_score
 LIMIT 20
 
-// Web vulnerabilities on specific subdomain
-MATCH (s:Subdomain {{name: "api.example.com"}})<-[:BELONGS_TO]-(b:BaseURL)
-      -[:HAS_ENDPOINT]->(e:Endpoint)<-[:FOUND_AT]-(v:Vulnerability)
+// Web vulnerabilities on specific subdomain (via Service chain or direct HAS_BASE_URL)
+MATCH (s:Subdomain {{name: "api.example.com"}})-[:RESOLVES_TO]->(:IP)-[:HAS_PORT]->(:Port)-[:RUNS_SERVICE]->(:Service)-[:SERVES_URL]->(b:BaseURL)
+MATCH (b)-[:HAS_ENDPOINT]->(e:Endpoint)<-[:FOUND_AT]-(v:Vulnerability)
 WHERE v.severity IN ["critical", "high"]
 RETURN e.url, v.name, v.severity
 

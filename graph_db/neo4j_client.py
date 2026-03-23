@@ -1999,7 +1999,7 @@ class Neo4jClient:
                         session.run(
                             """
                             MERGE (bu:BaseURL {url: $baseurl, user_id: $user_id, project_id: $project_id})
-                            ON CREATE SET bu.source = 'katana_crawl',
+                            ON CREATE SET bu.source = 'resource_enum',
                                           bu.updated_at = datetime()
                             WITH bu
                             MATCH (e:Endpoint {path: $path, method: $method, baseurl: $baseurl, user_id: $user_id, project_id: $project_id})
@@ -2009,6 +2009,7 @@ class Neo4jClient:
                             user_id=user_id, project_id=project_id
                         )
                         stats["relationships_created"] += 1
+
 
                     # Parse and create Parameter nodes from query string
                     if query_string:
@@ -2332,21 +2333,31 @@ class Neo4jClient:
                         cves_created += 1
 
                         # Create relationship: Technology -[:HAS_KNOWN_CVE]-> CVE
-                        # Match Technology node by name AND version (case-insensitive)
+                        # Match Technology node by name (case-insensitive)
                         # Matching strategies (in order):
                         # 1. Exact match by clean name (key without version suffix)
                         # 2. Exact match by NVD product name or raw key
                         # 3. CONTAINS fallback (product name within technology name)
+                        # Version matching:
+                        # - First try exact version match
+                        # - Then fallback to version-less match (handles httpx detecting
+                        #   "Apache Tomcat" without version while NVD uses "Apache-Coyote/1.1")
+                        name_where = """
+                            (toLower(t.name) = toLower($tech_name_clean)
+                             OR toLower(t.name) = toLower($tech_product)
+                             OR toLower(t.name) = toLower($tech_key)
+                             OR toLower(t.name) CONTAINS toLower($tech_product))
+                        """
+
+                        matched = 0
+
                         if tech_version:
+                            # Try 1: exact name + exact version
                             result = session.run(
-                                """
-                                MATCH (t:Technology {user_id: $user_id, project_id: $project_id})
-                                WHERE (toLower(t.name) = toLower($tech_name_clean)
-                                       OR toLower(t.name) = toLower($tech_product)
-                                       OR toLower(t.name) = toLower($tech_key)
-                                       OR toLower(t.name) CONTAINS toLower($tech_product))
-                                  AND t.version = $tech_version
-                                MATCH (c:CVE {id: $cve_id})
+                                f"""
+                                MATCH (t:Technology {{user_id: $user_id, project_id: $project_id}})
+                                WHERE {name_where} AND t.version = $tech_version
+                                MATCH (c:CVE {{id: $cve_id}})
                                 MERGE (t)-[:HAS_KNOWN_CVE]->(c)
                                 RETURN count(*) as matched
                                 """,
@@ -2355,19 +2366,14 @@ class Neo4jClient:
                                 tech_version=tech_version, cve_id=cve_id
                             )
                             matched = result.single()["matched"]
-                            if matched > 0:
-                                cve_relationships_created += 1
-                        else:
-                            # No version specified - match technologies without version
+
+                        if matched == 0:
+                            # Try 2: name match ignoring version (fallback for version mismatch)
                             result = session.run(
-                                """
-                                MATCH (t:Technology {user_id: $user_id, project_id: $project_id})
-                                WHERE (toLower(t.name) = toLower($tech_name_clean)
-                                       OR toLower(t.name) = toLower($tech_product)
-                                       OR toLower(t.name) = toLower($tech_key)
-                                       OR toLower(t.name) CONTAINS toLower($tech_product))
-                                  AND t.version = ''
-                                MATCH (c:CVE {id: $cve_id})
+                                f"""
+                                MATCH (t:Technology {{user_id: $user_id, project_id: $project_id}})
+                                WHERE {name_where}
+                                MATCH (c:CVE {{id: $cve_id}})
                                 MERGE (t)-[:HAS_KNOWN_CVE]->(c)
                                 RETURN count(*) as matched
                                 """,
@@ -2375,8 +2381,9 @@ class Neo4jClient:
                                 tech_product=tech_product, tech_key=tech_name, cve_id=cve_id
                             )
                             matched = result.single()["matched"]
-                            if matched > 0:
-                                cve_relationships_created += 1
+
+                        if matched > 0:
+                            cve_relationships_created += 1
 
                         # Process MITRE data if available
                         mitre_attack = cve.get("mitre_attack", {})
@@ -3181,6 +3188,26 @@ class Neo4jClient:
                     )
                 except Exception as e:
                     stats["errors"].append(f"Domain update failed: {e}")
+
+            # Connect orphaned BaseURLs to their Subdomain node
+            # BaseURLs created by resource_enum may not have a Service -[:SERVES_URL]-> link
+            # if httpx didn't probe that URL (e.g., port 80 redirected to HTTPS).
+            # Link them to the Subdomain to prevent disconnected graph clusters.
+            orphan_result = session.run(
+                """
+                MATCH (bu:BaseURL {user_id: $user_id, project_id: $project_id})
+                WHERE NOT (bu)<-[:SERVES_URL]-()
+                MATCH (sub:Subdomain {user_id: $user_id, project_id: $project_id})
+                WHERE bu.url CONTAINS sub.name
+                MERGE (sub)-[:HAS_BASE_URL]->(bu)
+                RETURN count(*) AS linked
+                """,
+                user_id=user_id, project_id=project_id
+            )
+            orphans_linked = orphan_result.single()["linked"]
+            if orphans_linked > 0:
+                print(f"[+][graph-db] Linked {orphans_linked} orphaned BaseURL(s) to Subdomain")
+                stats["relationships_created"] += orphans_linked
 
             print(f"[+][graph-db] Created {stats['endpoints_created']} Endpoint nodes")
             print(f"[+][graph-db] Created {stats['parameters_created']} Parameter nodes")

@@ -101,6 +101,7 @@ def run_vuln_scan(recon_data: dict, output_file: Path = None, settings: dict = N
     NUCLEI_DAST_MODE = settings.get('NUCLEI_DAST_MODE', True)
     NUCLEI_NEW_TEMPLATES_ONLY = settings.get('NUCLEI_NEW_TEMPLATES_ONLY', False)
     NUCLEI_CUSTOM_TEMPLATES = settings.get('NUCLEI_CUSTOM_TEMPLATES', [])
+    NUCLEI_SELECTED_CUSTOM_TEMPLATES = settings.get('NUCLEI_SELECTED_CUSTOM_TEMPLATES', [])
     NUCLEI_HEADLESS = settings.get('NUCLEI_HEADLESS', False)
     NUCLEI_SYSTEM_RESOLVERS = settings.get('NUCLEI_SYSTEM_RESOLVERS', True)
     NUCLEI_FOLLOW_REDIRECTS = settings.get('NUCLEI_FOLLOW_REDIRECTS', True)
@@ -240,6 +241,10 @@ def run_vuln_scan(recon_data: dict, output_file: Path = None, settings: dict = N
     print(f"[*][Nuclei] Follow Redirects: {NUCLEI_FOLLOW_REDIRECTS} (max {NUCLEI_MAX_REDIRECTS})")
     print(f"[*][Nuclei] New Templates Only: {NUCLEI_NEW_TEMPLATES_ONLY}")
     print(f"[*][Nuclei] Auto Update Templates: {NUCLEI_AUTO_UPDATE_TEMPLATES}")
+    if NUCLEI_SELECTED_CUSTOM_TEMPLATES:
+        print(f"[*][Nuclei] Custom Templates Selected: {len(NUCLEI_SELECTED_CUSTOM_TEMPLATES)}")
+        for tpl in NUCLEI_SELECTED_CUSTOM_TEMPLATES:
+            print(f"[*][Nuclei]   - {tpl}")
     # CVE lookup settings
     print(f"[*][Nuclei] CVE Lookup: {CVE_LOOKUP_ENABLED}")
     if CVE_LOOKUP_ENABLED:
@@ -302,6 +307,7 @@ def run_vuln_scan(recon_data: dict, output_file: Path = None, settings: dict = N
             templates=NUCLEI_TEMPLATES,
             exclude_templates=NUCLEI_EXCLUDE_TEMPLATES,
             custom_templates=NUCLEI_CUSTOM_TEMPLATES,
+            selected_custom_templates=NUCLEI_SELECTED_CUSTOM_TEMPLATES,
             tags=NUCLEI_TAGS,
             exclude_tags=NUCLEI_EXCLUDE_TAGS,
             rate_limit=NUCLEI_RATE_LIMIT,

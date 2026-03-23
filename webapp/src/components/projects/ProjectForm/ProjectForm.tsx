@@ -18,6 +18,7 @@ import { HakrawlerSection } from './sections/HakrawlerSection'
 import { JsluiceSection } from './sections/JsluiceSection'
 import { FfufSection } from './sections/FfufSection'
 import { GauSection } from './sections/GauSection'
+import { ParamSpiderSection } from './sections/ParamSpiderSection'
 import { KiterunnerSection } from './sections/KiterunnerSection'
 import { ArjunSection } from './sections/ArjunSection'
 import { CveLookupSection } from './sections/CveLookupSection'
@@ -424,6 +425,7 @@ export function ProjectForm({
             <JsluiceSection data={formData} updateField={updateField} />
             <FfufSection data={formData} updateField={updateField} projectId={projectId} mode={mode} />
             <GauSection data={formData} updateField={updateField} />
+            <ParamSpiderSection data={formData} updateField={updateField} />
             <KiterunnerSection data={formData} updateField={updateField} />
             <ArjunSection data={formData} updateField={updateField} />
           </>

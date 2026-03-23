@@ -144,6 +144,7 @@ class ContainerManager:
         user_id: str,
         webapp_api_url: str,
         recon_path: str,
+        custom_templates_path: str = "",
     ) -> ReconState:
         """Start a recon container for a project"""
 
@@ -196,6 +197,8 @@ class ContainerManager:
                     # HOST_RECON_OUTPUT_PATH: Required for nested Docker containers (naabu, httpx, etc.)
                     # These run as sibling containers and need host paths for volume mounts
                     "HOST_RECON_OUTPUT_PATH": f"{recon_path}/output",
+                    # Custom nuclei templates host path (for sibling nuclei container volume mount)
+                    "HOST_CUSTOM_TEMPLATES_PATH": custom_templates_path,
                     # Forward credentials from orchestrator environment
                     "NEO4J_URI": os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
                     "NEO4J_USER": os.environ.get("NEO4J_USER", "neo4j"),

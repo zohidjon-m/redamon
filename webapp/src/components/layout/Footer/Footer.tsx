@@ -24,7 +24,7 @@ export function Footer() {
             Legal & Terms of Use
           </a>
         </div>
-        <span className={styles.version}>v2.3.0</span>
+        <span className={styles.version}>v3.0.0</span>
       </div>
     </footer>
   )

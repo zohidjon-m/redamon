@@ -253,6 +253,7 @@ services:
       - ./gvm_scan/output:/app/gvm_scan/output:rw
       - ./github_secret_hunt:/app/github_secret_hunt:ro
       - ./github_secret_hunt/output:/app/github_secret_hunt/output:rw
+      - ./mcp/nuclei-templates:/app/nuclei-templates:ro
     environment:
       # Host paths are auto-detected from container mounts (no hardcoded paths needed)
       RECON_IMAGE: redamon-recon:latest
@@ -405,9 +406,11 @@ services:
       GITHUB_HUNT_OUTPUT_PATH: /data/github-hunt-output
       REPORT_OUTPUT_PATH: /data/reports
       WORDLIST_UPLOAD_PATH: /data/recon-wordlists
+      NUCLEI_TEMPLATES_PATH: /data/nuclei-templates
     volumes:
       - ./recon/output:/data/recon-output:ro
       - ./recon/wordlists:/data/recon-wordlists:rw
+      - ./mcp/nuclei-templates:/data/nuclei-templates:rw
       - ./gvm_scan/output:/data/gvm-output:ro
       - ./github_secret_hunt/output:/data/github-hunt-output:ro
       - report_data:/data/reports

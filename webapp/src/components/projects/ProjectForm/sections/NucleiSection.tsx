@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronDown, Shield } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ChevronDown, Shield, Upload, Trash2, Loader2, FileText } from 'lucide-react'
 import { Toggle } from '@/components/ui'
 import type { Project } from '@prisma/client'
 import styles from '../ProjectForm.module.css'
@@ -15,10 +15,92 @@ interface NucleiSectionProps {
   updateField: <K extends keyof FormData>(field: K, value: FormData[K]) => void
 }
 
+interface CustomTemplate {
+  id: string
+  name: string
+  severity: string
+  file: string
+  path: string
+  size: number
+}
+
 const SEVERITY_OPTIONS = ['critical', 'high', 'medium', 'low', 'info']
+
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#e53e3e',
+  high: '#dd6b20',
+  medium: '#d69e2e',
+  low: '#38a169',
+  info: '#3182ce',
+  unknown: '#718096',
+}
 
 export function NucleiSection({ data, updateField }: NucleiSectionProps) {
   const [isOpen, setIsOpen] = useState(true)
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const templateFileRef = useRef<HTMLInputElement>(null)
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/nuclei-templates')
+      if (res.ok) {
+        const json = await res.json()
+        setCustomTemplates(json.templates || [])
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
+
+  const handleTemplateUpload = async (file: File) => {
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/nuclei-templates', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const result = await res.json()
+      if (!res.ok) {
+        setUploadError(result.error || 'Upload failed')
+        return
+      }
+
+      setCustomTemplates(result.templates || [])
+    } catch {
+      setUploadError('Upload failed. Please try again.')
+    } finally {
+      setIsUploading(false)
+      if (templateFileRef.current) templateFileRef.current.value = ''
+    }
+  }
+
+  const handleTemplateDelete = async (templatePath: string) => {
+    try {
+      const res = await fetch(
+        `/api/nuclei-templates?path=${encodeURIComponent(templatePath)}`,
+        { method: 'DELETE' }
+      )
+
+      if (res.ok) {
+        const result = await res.json()
+        setCustomTemplates(result.templates || [])
+      }
+    } catch {
+      // Silently fail
+    }
+  }
 
   const toggleSeverity = (severity: string) => {
     const current = data.nucleiSeverity ?? []
@@ -223,6 +305,126 @@ export function NucleiSection({ data, updateField }: NucleiSectionProps) {
                 onChange={(checked) => updateField('nucleiAutoUpdateTemplates', checked)}
               />
             </div>
+            {/* Custom Templates Manager */}
+            <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-secondary, #1a1a2e)', borderRadius: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--text-primary)' }}>Custom Templates</span>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', margin: '2px 0 0' }}>
+                    Upload is global. Check templates to include in this project's scans.
+                  </p>
+                </div>
+                <div>
+                  <input
+                    ref={templateFileRef}
+                    type="file"
+                    accept=".yaml,.yml"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) handleTemplateUpload(file)
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="secondaryButton"
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', padding: '4px 10px' }}
+                    onClick={() => templateFileRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? <Loader2 size={13} className={styles.spin} /> : <Upload size={13} />}
+                    {isUploading ? 'Uploading...' : 'Upload .yaml'}
+                  </button>
+                </div>
+              </div>
+
+              {uploadError && (
+                <p style={{ fontSize: '0.75rem', color: '#e53e3e', margin: '4px 0 8px' }}>{uploadError}</p>
+              )}
+
+              {customTemplates.length === 0 ? (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontStyle: 'italic', margin: '8px 0 0' }}>
+                  No custom templates uploaded yet.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
+                  {customTemplates.map((t) => {
+                    const selected = data.nucleiSelectedCustomTemplates ?? []
+                    const isChecked = selected.includes(t.path)
+                    return (
+                      <div
+                        key={t.path}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          background: isChecked ? 'var(--bg-tertiary, #16162a)' : 'transparent',
+                          fontSize: '0.78rem',
+                          border: isChecked ? '1px solid var(--color-primary, #e53e3e33)' : '1px solid transparent',
+                        }}
+                      >
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              const current = data.nucleiSelectedCustomTemplates ?? []
+                              if (isChecked) {
+                                updateField('nucleiSelectedCustomTemplates', current.filter(p => p !== t.path))
+                              } else {
+                                updateField('nucleiSelectedCustomTemplates', [...current, t.path])
+                              }
+                            }}
+                            style={{ accentColor: 'var(--color-primary, #e53e3e)', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              color: '#fff',
+                              background: SEVERITY_COLORS[t.severity] || SEVERITY_COLORS.unknown,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {t.severity}
+                          </span>
+                          <span style={{ color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {t.id}
+                          </span>
+                          {t.name && (
+                            <span style={{ color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              — {t.name}
+                            </span>
+                          )}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleTemplateDelete(t.path)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-tertiary)',
+                            padding: '2px',
+                            flexShrink: 0,
+                            marginLeft: '8px',
+                          }}
+                          title={`Delete ${t.file}`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className={styles.toggleRow}>
               <div>
                 <span className={styles.toggleLabel}>New Templates Only</span>

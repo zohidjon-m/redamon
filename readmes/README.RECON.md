@@ -327,7 +327,7 @@ flowchart LR
     end
 
     subgraph G5["GROUP 5 — parallel + sequential"]
-        RE[Resource Enum<br/>Katana ∥ Hakrawler ∥ GAU ∥ Kiterunner<br/>then jsluice → FFuf → Arjun]
+        RE[Resource Enum<br/>Katana ∥ Hakrawler ∥ GAU ∥ ParamSpider ∥ Kiterunner<br/>then jsluice → FFuf → Arjun]
     end
 
     subgraph G6["GROUP 6 — sequential"]
