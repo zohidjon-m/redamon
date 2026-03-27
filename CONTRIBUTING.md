@@ -156,6 +156,8 @@ Pick items from the [Roadmap Project Board](https://github.com/users/samugit83/p
 
 > **Note:** If you need to add a new Python import to `recon_orchestrator` or `agent`, check the Dockerfile first — the container must have the package or it will crash-loop.
 
+> **Integrating a new tool?** We provide battle-tested AI prompts that guide you through every file and dependency layer — plus an iterative review workflow for zero-bug PRs. See **[AI-Assisted Development](https://github.com/samugit83/redamon/wiki/AI-Assisted-Development)** on the wiki.
+
 ### Docs & Wiki
 
 **Difficulty:** Beginner-friendly | **Components:** `redamon.wiki/`, README files

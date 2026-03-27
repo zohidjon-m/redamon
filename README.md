@@ -527,6 +527,7 @@ flowchart TB
 | Resource | Link |
 |----------|------|
 | **Full Wiki** (user guide) | **[github.com/samugit83/redamon/wiki](https://github.com/samugit83/redamon/wiki)** |
+| AI-Assisted Development | **[Wiki: Ship Perfect PRs with AI](https://github.com/samugit83/redamon/wiki/AI-Assisted-Development)** |
 | Developer Guide | [readmes/README.DEV.md](readmes/README.DEV.md) |
 | Architecture Diagrams | [readmes/ARCHITECTURE.md](readmes/ARCHITECTURE.md) |
 | Technology Stack | [readmes/TECH_STACK.md](readmes/TECH_STACK.md) |

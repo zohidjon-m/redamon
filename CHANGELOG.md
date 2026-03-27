@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Improved classification for informational requests** — the LLM classifier now always determines the best-matching agent skill regardless of phase. Pure recon requests (e.g., "show attack surface") classify as `recon-unclassified` instead of defaulting to `cve_exploit`.
 
+- **AI-Assisted Development wiki page** — new contributor guide with two structured integration prompts (`ADD_AGENTIC_TOOL`, `ADD_RECON_TOOL`) and a 7-step iterative workflow for shipping zero-bug PRs using Claude Code. See [Wiki: AI-Assisted Development](https://github.com/samugit83/redamon/wiki/AI-Assisted-Development).
+
 ### Fixed
 
 - **Duplicate tool widget replacement** — fixed a bug where the second call to the same tool (e.g., two `execute_curl` calls) would overwrite the first widget in the chat timeline. Root cause: streaming event dedup key only used `tool_name`, causing the second `tool_start` to be deduplicated away. Fix: include `tool_args` in the dedup key.
