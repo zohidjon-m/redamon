@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ShieldAlert, ExternalLink } from 'lucide-react'
+import Image from 'next/image'
+import { ShieldAlert, ExternalLink, Star, Github } from 'lucide-react'
 import {
   DISCLAIMER_VERSION,
   DISCLAIMER_STORAGE_KEY,
   DISCLAIMER_GITHUB_URL,
+  REDAMON_GITHUB_URL,
 } from '@/lib/disclaimerVersion'
 import styles from './DisclaimerGate.module.css'
 
@@ -54,6 +56,7 @@ const CHECKBOXES = [
 export function DisclaimerGate({ children }: DisclaimerGateProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isAccepted, setIsAccepted] = useState(false)
+  const [step, setStep] = useState<'welcome' | 'disclaimer'>('welcome')
   const [checked, setChecked] = useState<boolean[]>(
     () => new Array(CHECKBOXES.length).fill(false)
   )
@@ -102,6 +105,74 @@ export function DisclaimerGate({ children }: DisclaimerGateProps) {
 
   if (isAccepted) {
     return <>{children}</>
+  }
+
+  if (step === 'welcome') {
+    return (
+      <div className={styles.overlay}>
+        <div className={styles.card}>
+          <Image src="/logo.png" alt="" aria-hidden width={520} height={520} className={styles.eyeBg} />
+          <div className={styles.welcomeHeader}>
+            <Image src="/logo.png" alt="RedAmon" width={36} height={36} style={{ objectFit: 'contain' }} />
+            <h1 className={styles.welcomeTitle}>
+              Welcome to <span className={styles.logoAccent}>Red</span>Amon
+            </h1>
+          </div>
+
+          <div className={styles.body}>
+            <p className={styles.welcomeThank}>
+              Thank you for downloading and installing <strong>RedAmon</strong>!
+            </p>
+
+            <p className={styles.welcomeDesc}>
+              <strong>RedAmon</strong> is an open-source, AI-powered
+              penetration testing platform that combines autonomous
+              reconnaissance, graph-based attack surface mapping, and an
+              intelligent agent to help security professionals work faster and
+              smarter, from initial footprinting to full engagement reporting.
+            </p>
+
+            <div className={styles.missionBox}>
+              <p className={styles.missionText}>
+                Our commitment is to keep RedAmon always up-to-date and make it
+                the <strong>#1 open-source pentesting platform</strong> in the
+                world. To get there, we need the community&apos;s help.
+              </p>
+              <p className={styles.missionText}>
+                We&apos;re not asking for money, just a ⭐ GitHub star to help us grow, gain visibility, and attract contributors. If you&apos;d like to go further, feel free to open a pull request or reach out to our maintainers directly.<br />Every contribution matters.
+              </p>
+              <p className={styles.footerSignature}>
+                Happy hunting!<br />Samuele &amp; Ritesh
+              </p>
+            </div>
+
+            <a
+              href={REDAMON_GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.starLink}
+            >
+              <Github size={20} />
+              <Star size={18} className={styles.starIcon} />
+              <span>Star RedAmon on GitHub</span>
+              <ExternalLink size={13} className={styles.starExternal} />
+            </a>
+          </div>
+
+          <div className={styles.footer}>
+            <p className={styles.footerQuote}>
+              &ldquo;Open source is humanity&apos;s greatest collaborative experiment.&rdquo;
+            </p>
+            <button
+              className={styles.acceptButton}
+              onClick={() => setStep('disclaimer')}
+            >
+              OK, continue
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
