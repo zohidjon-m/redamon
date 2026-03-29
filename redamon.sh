@@ -109,6 +109,62 @@ remove_redamon_images() {
     done
 }
 
+pull_gvm_images() {
+    # GVM images are large (~250MB each) and the Greenbone registry can be
+    # unreliable, causing "unexpected EOF" on long downloads. Pull them
+    # individually with retries so a single network hiccup doesn't abort
+    # the entire startup.
+    local max_retries=3
+    local gvm_services
+    gvm_services=$(docker compose config --services 2>/dev/null | grep '^gvm-')
+
+    if [[ -z "$gvm_services" ]]; then
+        return 0
+    fi
+
+    info "Pulling GVM images (with retry)..."
+    local failed=()
+    for svc in $gvm_services; do
+        local attempt=1
+        while [[ $attempt -le $max_retries ]]; do
+            if docker compose pull "$svc" 2>/dev/null; then
+                break
+            fi
+            if [[ $attempt -lt $max_retries ]]; then
+                warn "Pull failed for $svc (attempt $attempt/$max_retries), retrying..."
+                sleep 3
+            fi
+            ((attempt++))
+        done
+        if [[ $attempt -gt $max_retries ]]; then
+            failed+=("$svc")
+        fi
+    done
+
+    # Also pull gvmd separately (no gvm- prefix)
+    local attempt=1
+    while [[ $attempt -le $max_retries ]]; do
+        if docker compose pull gvmd 2>/dev/null; then
+            break
+        fi
+        if [[ $attempt -lt $max_retries ]]; then
+            warn "Pull failed for gvmd (attempt $attempt/$max_retries), retrying..."
+            sleep 3
+        fi
+        ((attempt++))
+    done
+    if [[ $attempt -gt $max_retries ]]; then
+        failed+=(gvmd)
+    fi
+
+    if [[ ${#failed[@]} -gt 0 ]]; then
+        error "Failed to pull after $max_retries attempts: ${failed[*]}"
+        error "Check your network connection and try again."
+        exit 1
+    fi
+    success "All GVM images pulled successfully."
+}
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -140,6 +196,11 @@ cmd_install() {
     # Build all images (tools + core services)
     info "Building all images (this may take a while on first run)..."
     docker compose --profile tools build
+
+    # Pull GVM images with retry (large images, unreliable registry)
+    if [[ "$gvm_mode" == "true" ]]; then
+        pull_gvm_images
+    fi
 
     # Start services
     info "Starting services..."
@@ -318,6 +379,11 @@ cmd_up() {
     fi
 
     info "Starting RedAmon (GVM: ${gvm_mode})..."
+
+    # Pull GVM images with retry (large images, unreliable registry)
+    if [[ "$gvm_mode" == "true" ]]; then
+        pull_gvm_images
+    fi
 
     if [[ "$gvm_mode" == "true" ]]; then
         docker compose up -d
